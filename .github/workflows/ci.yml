@@ -26,6 +26,9 @@ jobs:
         if: runner.os == 'Linux'
         shell: bash
         run: test -z "$(gofmt -l .)"
+      - name: i18n keys
+        if: runner.os == 'Linux'
+        run: node tools/check-i18n.js
       - run: go vet ./...
       - run: go test ./...
       - name: go test -race

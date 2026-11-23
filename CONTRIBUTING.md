@@ -9,7 +9,8 @@ embedded HTML files, no front-end build step.
 go run . --scrcpy-jar /path/to/scrcpy-server
 go vet ./...
 go test ./...
-gofmt -l .      # must print nothing
+gofmt -l .              # must print nothing
+node tools/check-i18n.js
 ```
 
 To exercise the UI you need at least one Android device (or emulator) visible to
@@ -19,8 +20,10 @@ To exercise the UI you need at least one Android device (or emulator) visible to
 
 - Keep the dependency count at one (`gorilla/websocket`). Prefer the standard
   library and the browser platform.
-- UI strings live in the `S = ZH ? {...} : {...}` blocks in `web.html` and
-  `grid.html`. Add a key to **both** languages when you add a string.
+- UI strings live in `i18n.js`. Add a key to **every** locale, then use it from
+  HTML with `data-i18n`, `data-i18n-placeholder` or `data-i18n-title`, or from
+  JS with `I18N.t("key", {name: value})`. `node tools/check-i18n.js` fails on a
+  missing key or an empty value.
 - Mutating endpoints are POST. Input sent to the device must be shell-quoted.
 - Do not commit `devices.json`, `names.json`, device serials, LAN addresses,
   tokens, or screenshots that show a device's real screen. Use documentation

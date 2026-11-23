@@ -6,6 +6,8 @@
  html,body{margin:0;height:100%;overflow:hidden;overscroll-behavior:none;background:#111;color:#eee;font:14px system-ui,-apple-system,"Segoe UI",sans-serif}
  body{display:flex;flex-direction:column;height:100dvh;min-width:0}
  header{flex:0 0 auto;display:flex;gap:6px;flex-wrap:wrap;padding:8px;align-items:center;background:#1b1b1b;min-width:0}
+ #tabs{display:flex;gap:6px;flex-wrap:wrap;align-items:center;min-width:0}
+ #lang{margin-left:auto;background:#2b2b2b;color:#eee;border:1px solid #444;border-radius:8px;padding:7px 8px;font:inherit;cursor:pointer}
  header button{flex:0 0 auto;display:flex;align-items:center;gap:6px;background:#2b2b2b;color:#eee;border:1px solid #444;border-radius:8px;padding:8px 12px;font:inherit;transition:background .15s}
  .dot{width:9px;height:9px;border-radius:50%;background:#777;display:inline-block}
  .dot.on{background:#22c55e;box-shadow:0 0 6px #22c55e}
@@ -33,7 +35,10 @@
    .bar button{padding:8px 8px;font-size:13px}
  }
 </style></head><body>
-<header id="tabs"></header>
+<header>
+ <div id="tabs"></div>
+ <select id="lang"></select>
+</header>
 <div id="warn"></div>
 <div id="wrap">
  <div id="stage">
@@ -44,40 +49,24 @@
 </div>
 <div class="bar">
  <div class="keys">
-  <button id="bBack">← Back</button>
-  <button id="bRecents">Recents</button>
-  <button id="bHome">Home</button>
-  <button id="bEnter">Enter</button>
-  <button id="bWake">Wake</button>
-  <button id="bRename">✎ Rename</button>
-  <a id="bGrid" href="/grid" style="background:#2b2b2b;color:#eee;border:1px solid #444;border-radius:8px;padding:8px 10px;font:inherit;text-decoration:none;display:inline-block">Grid</a>
+  <button id="bBack" data-i18n="back">← Back</button>
+  <button id="bRecents" data-i18n="recents">Recents</button>
+  <button id="bHome" data-i18n="home">Home</button>
+  <button id="bEnter" data-i18n="enter">Enter</button>
+  <button id="bWake" data-i18n="wake">Wake</button>
+  <button id="bRename" data-i18n="rename">✎ Rename</button>
+  <a id="bGrid" href="/grid" data-i18n="grid" style="background:#2b2b2b;color:#eee;border:1px solid #444;border-radius:8px;padding:8px 10px;font:inherit;text-decoration:none;display:inline-block">Grid</a>
  </div>
  <div class="txtrow">
-  <input type="text" id="txt" enterkeyhint="send">
-  <button id="bType">Type</button>
+  <input type="text" id="txt" enterkeyhint="send" data-i18n-placeholder="typePlaceholder">
+  <button id="bType" data-i18n="type">Type</button>
  </div>
 </div>
+<script src="/i18n.js"></script>
 <script>
-const ZH=(navigator.language||'en').toLowerCase().startsWith('zh');
-const S=ZH?{
- back:'← 返回', recents:'后台', home:'Home', enter:'Enter', wake:'唤醒', rename:'✎ 改名', grid:'平铺', type:'输入', ph:'输入文字…',
- connecting:'正在连接', reconnecting:'正在重连', detecting:'正在检测', offline:'设备已断开', offlineHint:'请检查 USB 线 / USB 拓展坞',
- renamePrompt:'设备显示名称（留空恢复默认）：',
- insecure:'当前地址不是安全上下文，只能回退低清画面。请改用',
- noDevices:'没有检测到设备。用 USB 连接手机并开启 USB 调试，或创建 devices.json。'
-}:{
- back:'← Back', recents:'Recents', home:'Home', enter:'Enter', wake:'Wake', rename:'✎ Rename', grid:'Grid', type:'Type', ph:'type text…',
- connecting:'Connecting to', reconnecting:'Reconnecting to', detecting:'Checking', offline:'Device disconnected', offlineHint:'Check the USB cable or hub',
- renamePrompt:'Display name (leave empty to reset):',
- insecure:'This origin is not a secure context, so only the low-quality fallback works. Open',
- noDevices:'No devices found. Connect a phone over USB with debugging enabled, or create devices.json.'
-};
-document.documentElement.lang=ZH?'zh':'en';
-document.title='Phone Wall';
-for(const [id,key] of [['bBack','back'],['bRecents','recents'],['bHome','home'],['bEnter','enter'],['bWake','wake'],['bRename','rename'],['bGrid','grid'],['bType','type']]){
-  document.getElementById(id).textContent=S[key];
-}
-document.getElementById('txt').placeholder=S.ph;
+document.title=I18N.t('title');
+I18N.apply();
+I18N.mountSelect(document.getElementById('lang'));
 
 const CANVAS=document.getElementById('screen');
 const STAGE=document.getElementById('stage');
@@ -103,12 +92,12 @@ function checkSecure(){
   if(!(window.VideoDecoder&&window.ReadableStream)&&!local){
     const w=document.getElementById('warn');
     const u=`http://127.0.0.1:${location.port}/?dev=${encodeURIComponent(cur)}`;
-    w.innerHTML=`${S.insecure} <a href="${u}" style="color:#fbbf24;font-weight:700">http://127.0.0.1:${location.port}</a>`;
+    w.innerHTML=`${I18N.t('insecure')} <a href="${u}" style="color:#fbbf24;font-weight:700">http://127.0.0.1:${location.port}</a>`;
     w.classList.add('show');
   }
 }
 function emptyState(){
-  showLoading(S.noDevices,true);
+  showLoading(I18N.t('noDevices'),true);
 }
 async function loadDevices(){
   const r=await fetch('/devices'); const d=await r.json();
@@ -141,7 +130,7 @@ function refreshTabs(){
 }
 async function renameCurrent(){
   const now=displayNameOf(cur);
-  const nm=prompt(S.renamePrompt, now);
+  const nm=prompt(I18N.t('renamePrompt'), now);
   if(nm===null) return;
   try{
     await post(`/rename/${encodeURIComponent(cur)}?name=${encodeURIComponent(nm.trim())}`);
@@ -195,7 +184,7 @@ function bootstrapFrame(my){
 function connectWS(){
   stopVideo();
   const my=gen;
-  showLoading(S.connecting+' '+displayNameOf(cur)+' …');
+  showLoading(I18N.t('connectingMsg',{name:displayNameOf(cur)}));
   bootstrapFrame(my);
   let sock;
   try{
@@ -223,7 +212,7 @@ function connectWS(){
     wsReady=false; wsInput=false;
     if(ws===sock) ws=null;
     if(idleTimer){clearInterval(idleTimer); idleTimer=0;}
-    showLoading(S.reconnecting+' '+displayNameOf(cur)+' …');
+    showLoading(I18N.t('reconnectingMsg',{name:displayNameOf(cur)}));
     scheduleReconnect(my);
   };
   sock.onerror=()=>{ try{sock.close()}catch(e){} };
@@ -341,8 +330,8 @@ async function updateStatus(){
       if(!offlineShown){
         offlineShown=true; stopVideo();
         showLoading(status[cur]==='offline'
-          ? S.offline+': '+displayNameOf(cur)+'\n'+S.offlineHint
-          : S.detecting+' '+displayNameOf(cur)+' …', status[cur]==='offline');
+          ? I18N.t('offlineMsg',{name:displayNameOf(cur)})
+          : I18N.t('detectingMsg',{name:displayNameOf(cur)}), status[cur]==='offline');
       }
     }else if(offlineShown){
       offlineShown=false; hideLoading(); connectWS();

@@ -27,6 +27,9 @@ var webHTML []byte
 //go:embed grid.html
 var gridHTML []byte
 
+//go:embed i18n.js
+var i18nJS []byte
+
 var version = "dev"
 
 var (
@@ -79,6 +82,7 @@ func main() {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /{$}", htmlHandler(webHTML))
 	mux.HandleFunc("GET /grid", htmlHandler(gridHTML))
+	mux.HandleFunc("GET /i18n.js", jsHandler)
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		w.Write([]byte("ok\n"))
@@ -141,6 +145,12 @@ func htmlHandler(body []byte) http.HandlerFunc {
 		w.Header().Set("Cache-Control", "no-store")
 		w.Write(body)
 	}
+}
+
+func jsHandler(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Content-Type", "application/javascript; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
+	w.Write(i18nJS)
 }
 
 func jsonReply(w http.ResponseWriter, v any) {

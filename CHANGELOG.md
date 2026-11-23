@@ -19,7 +19,8 @@ All notable changes to this project are documented here. The format follows
 - Device auto-discovery, USB/wireless merge by `ro.serialno`, model names, rename.
 - Loopback-by-default binding, mandatory token for LAN binds, POST-only mutations,
   same-origin WebSocket checks.
-- Bilingual English/Chinese UI embedded in a single binary.
+- English and Simplified Chinese UI with automatic browser detection, a manual
+  language menu, and a `?lang=` override, embedded in a single binary.
 - CI on Linux, macOS and Windows; cross-platform release builds.
 
 [Unreleased]: https://github.com/TwitterIsGood/phone-wall/compare/v0.1.0...HEAD

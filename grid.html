@@ -8,7 +8,8 @@
  header{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:8px 10px;background:#1b1b1b;position:sticky;top:0;z-index:10}
  header .title{font-weight:700;margin-right:auto;white-space:nowrap}
  header .sub{color:#888;font-size:12px}
- header button,header a.btn{background:#2b2b2b;color:#eee;border:1px solid #444;border-radius:8px;padding:7px 10px;font:inherit;text-decoration:none;cursor:pointer}
+ header button,header a.btn,header select{background:#2b2b2b;color:#eee;border:1px solid #444;border-radius:8px;padding:7px 10px;font:inherit;text-decoration:none;cursor:pointer}
+ header select{padding-right:6px}
  #grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:10px;padding:10px;align-items:start}
  .empty{grid-column:1/-1;color:#888;text-align:center;padding:40px 16px;line-height:1.6}
  .tile{position:relative;background:#1b1b1b;border:1px solid #2c2c2c;border-radius:10px;padding:6px;display:flex;flex-direction:column;align-items:center;min-width:0}
@@ -27,26 +28,18 @@
  #toast{position:fixed;left:50%;bottom:12px;transform:translateX(-50%);background:rgba(0,0,0,.8);color:#ddd;padding:6px 12px;border-radius:999px;font-size:12px;display:none;z-index:20}
 </style></head><body>
 <header>
- <span class="title" id="ttl">Phone Wall</span>
- <span class="sub" id="sub"></span>
- <a class="btn" id="singleLink" href="/">Single</a>
+ <span class="title" data-i18n="title">Phone Wall</span>
+ <span class="sub" data-i18n="gridSubtitle"></span>
+ <select id="lang"></select>
+ <a class="btn" id="singleLink" href="/" data-i18n="single" data-i18n-title="openSingle">Single view</a>
 </header>
 <div id="grid"></div>
 <div id="toast"></div>
+<script src="/i18n.js"></script>
 <script>
-const ZH=(navigator.language||'en').toLowerCase().startsWith('zh');
-const S=ZH?{
- ttl:'手机墙', sub:'每个画面独立控制', single:'单屏', back:'返回', home:'主页', recents:'后台',
- open:'打开单屏', empty:'没有检测到设备。用 USB 连接手机并开启 USB 调试，或创建 devices.json。'
-}:{
- ttl:'Phone Wall', sub:'every tile is independently controllable', single:'Single view', back:'Back', home:'Home', recents:'Recents',
- open:'Open single view', empty:'No devices found. Connect a phone over USB with debugging enabled, or create devices.json.'
-};
-document.documentElement.lang=ZH?'zh':'en';
-document.title=S.ttl;
-document.getElementById('ttl').textContent=S.ttl;
-document.getElementById('sub').textContent=S.sub;
-document.getElementById('singleLink').textContent=S.single;
+document.title=I18N.t('gridTitle');
+I18N.apply();
+I18N.mountSelect(document.getElementById('lang'));
 
 const GRID=document.getElementById('grid');
 let tiles=[];
@@ -62,7 +55,7 @@ async function loadDevices(){
     tiles.push(new Tile(o.key,o.name));
   });
   if(!tiles.length){
-    const e=document.createElement('div'); e.className='empty'; e.textContent=S.empty;
+    const e=document.createElement('div'); e.className='empty'; e.textContent=I18N.t('noDevices');
     GRID.appendChild(e);
   }
   updateStatus();
@@ -82,11 +75,11 @@ class Tile{
     const head=document.createElement('div'); head.className='thead';
     this.dot=document.createElement('span'); this.dot.className='dot'; this.dot.id='dot_'+key;
     const a=document.createElement('a'); a.className='tname'; a.textContent=name;
-    a.href='/?dev='+encodeURIComponent(key); a.target='_blank'; a.title=S.open;
+    a.href='/?dev='+encodeURIComponent(key); a.target='_blank'; a.title=I18N.t('openSingle');
     head.appendChild(this.dot); head.appendChild(a);
     this.nav=document.createElement('div'); this.nav.className='tnav';
     [['back','◀'],['home','●'],['recents','■']].forEach(([k,ic])=>{
-      const b=document.createElement('button'); b.type='button'; b.textContent=ic; b.title=S[k];
+      const b=document.createElement('button'); b.type='button'; b.textContent=ic; b.title=I18N.t(k);
       b.onclick=(e)=>{e.stopPropagation();this.navKey(k);};
       this.nav.appendChild(b);
     });
