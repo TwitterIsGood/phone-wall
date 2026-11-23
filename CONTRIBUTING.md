@@ -20,10 +20,11 @@ To exercise the UI you need at least one Android device (or emulator) visible to
 
 - Keep the dependency count at one (`gorilla/websocket`). Prefer the standard
   library and the browser platform.
-- UI strings live in `i18n.js`. Add a key to **every** locale, then use it from
-  HTML with `data-i18n`, `data-i18n-placeholder` or `data-i18n-title`, or from
-  JS with `I18N.t("key", {name: value})`. `node tools/check-i18n.js` fails on a
-  missing key or an empty value.
+- UI strings live in `i18n.js` (`en`, `zh-CN`, `ja`, `vi`). Add a key to
+  **every** locale, then use it from HTML with `data-i18n`,
+  `data-i18n-placeholder` or `data-i18n-title`, or from JS with
+  `I18N.t("key", {name: value})`. `node tools/check-i18n.js` fails on a missing
+  key or an empty value.
 - Mutating endpoints are POST. Input sent to the device must be shell-quoted.
 - Do not commit `devices.json`, `names.json`, device serials, LAN addresses,
   tokens, or screenshots that show a device's real screen. Use documentation

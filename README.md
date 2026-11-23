@@ -26,7 +26,7 @@ Phone Wall turns USB or Wi-Fi connected Android devices into one self-hosted bro
 - **Old-device fallback.** If `scrcpy-server` cannot start (for example on an Android 6 OPPO A57), Phone Wall falls back to `screenrecord` plus `adb input` instead of showing a black tile.
 - **Zero-config discovery.** Without a config file, devices are discovered with `adb devices -l`; USB and wireless entries of the same phone are merged by `ro.serialno`, and tiles are named after the model.
 - **Rename and status.** Rename a tile from the UI (`names.json`), and see online/offline state at a glance.
-- **Localized UI.** English and Simplified Chinese, with automatic browser detection, a manual language menu, and a `?lang=` override. No build step, no external assets.
+- **Localized UI.** English, Simplified Chinese, Japanese and Vietnamese, with automatic browser detection, a manual language menu, and a `?lang=` override. No build step, no external assets.
 - **Safe defaults.** Loopback-only by default; a token is mandatory before binding to a LAN address. Mutations are POST-only and WebSockets are same-origin.
 - **One static binary.** The HTML, CSS and JS are embedded with `go:embed`; the only runtime dependencies are `adb` and the `scrcpy-server` jar.
 
@@ -92,7 +92,7 @@ Touch and key events use scrcpy's binary control protocol (32-byte inject-touch,
 
 ### Localization
 
-The UI ships with English and Simplified Chinese. `Auto` follows `navigator.languages`; a manual choice is remembered in `localStorage`. `?lang=en` or `?lang=zh-CN` overrides it and is remembered as well.
+The UI ships with English (`en`), Simplified Chinese (`zh-CN`), Japanese (`ja`) and Vietnamese (`vi`). `Auto` follows `navigator.languages`; a manual choice is remembered in `localStorage`. A query such as `?lang=ja` or `?lang=vi` overrides it and is remembered as well.
 
 All strings live in [`i18n.js`](i18n.js). To add a language, add an entry with the same keys as `en` and a native `name`; the menu picks it up automatically. `node tools/check-i18n.js` verifies that every locale has the same keys and no empty values.
 

@@ -6,6 +6,10 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Japanese (`ja`) and Vietnamese (`vi`) UI locales.
+
 ## [0.1.0] - 2026-11-23
 
 ### Added

@@ -64,6 +64,62 @@
         insecure: "当前地址不是安全上下文，只能回退低清画面。请改用",
         noDevices: "没有检测到设备。用 USB 连接手机并开启 USB 调试，或创建 devices.json。"
       }
+    },
+    ja: {
+      name: "日本語",
+      strings: {
+        title: "Phone Wall",
+        gridTitle: "Phone Wall · グリッド",
+        language: "言語",
+        auto: "自動",
+        single: "単一表示",
+        grid: "グリッド",
+        back: "← 戻る",
+        recents: "最近",
+        home: "ホーム",
+        enter: "Enter",
+        wake: "スリープ解除",
+        rename: "✎ 名前変更",
+        type: "入力",
+        typePlaceholder: "テキストを入力…",
+        openSingle: "単一表示を開く",
+        gridSubtitle: "各タイルを個別に操作できます",
+        connectingMsg: "{name} に接続中 …",
+        reconnectingMsg: "{name} に再接続中 …",
+        detectingMsg: "{name} を確認中 …",
+        offlineMsg: "デバイスが切断されました：{name}\nUSB ケーブルまたはハブを確認してください",
+        renamePrompt: "表示名（空欄で既定に戻す）：",
+        insecure: "このオリジンは安全なコンテキストではないため、低画質のフォールバックのみ利用できます。次を開いてください",
+        noDevices: "デバイスが見つかりません。USB デバッグを有効にして電話を接続するか、devices.json を作成してください。"
+      }
+    },
+    vi: {
+      name: "Tiếng Việt",
+      strings: {
+        title: "Phone Wall",
+        gridTitle: "Phone Wall · Lưới",
+        language: "Ngôn ngữ",
+        auto: "Tự động",
+        single: "Một máy",
+        grid: "Lưới",
+        back: "← Quay lại",
+        recents: "Đa nhiệm",
+        home: "Trang chủ",
+        enter: "Enter",
+        wake: "Đánh thức",
+        rename: "✎ Đổi tên",
+        type: "Nhập",
+        typePlaceholder: "nhập văn bản…",
+        openSingle: "Mở chế độ một máy",
+        gridSubtitle: "mỗi ô được điều khiển độc lập",
+        connectingMsg: "Đang kết nối tới {name} …",
+        reconnectingMsg: "Đang kết nối lại tới {name} …",
+        detectingMsg: "Đang kiểm tra {name} …",
+        offlineMsg: "Thiết bị đã ngắt kết nối: {name}\nKiểm tra cáp USB hoặc hub",
+        renamePrompt: "Tên hiển thị (để trống để đặt lại):",
+        insecure: "Origin này không phải là ngữ cảnh an toàn nên chỉ dùng được chế độ dự phòng chất lượng thấp. Hãy mở",
+        noDevices: "Không tìm thấy thiết bị. Kết nối điện thoại qua USB với gỡ lỗi đã bật, hoặc tạo devices.json."
+      }
     }
   };
 
@@ -79,6 +135,8 @@
     const t = String(tag).toLowerCase();
     if (t === "zh" || t.startsWith("zh-")) return "zh-CN";
     if (t.startsWith("en")) return "en";
+    if (t.startsWith("ja")) return "ja";
+    if (t.startsWith("vi")) return "vi";
     return "";
   }
 
@@ -204,6 +262,7 @@
     lang: lang,
     preference: preference,
     locales: LOCALES,
+    normalize: normalize,
     available: Object.keys(LOCALES).map((code) => ({ code: code, name: LOCALES[code].name })),
     t: t,
     apply: apply,

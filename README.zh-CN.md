@@ -26,7 +26,7 @@ Phone Wall 把通过 USB 或无线 ADB 连接的安卓设备变成一个自托�
 - **老设备兜底。** `scrcpy-server` 起不来时（例如 Android 6 的 OPPO A57）自动回退 `screenrecord` + `adb input`，不会留下黑屏。
 - **零配置发现。** 没有配置文件时用 `adb devices -l` 自动发现；同一台手机的 USB 与无线条目会按 `ro.serialno` 合并，并按型号命名。
 - **改名与状态。** 页面内改名（写入 `names.json`），在线/离线状态一目了然。
-- **界面本地化。** 内置英文和简体中文；自动跟随浏览器语言，也可在页面里手动切换，或用 `?lang=` 指定。无外部资源、无构建步骤。
+- **界面本地化。** 内置英文、简体中文、日语和越南语；自动跟随浏览器语言，也可在页面里手动切换，或用 `?lang=` 指定。无外部资源、无构建步骤。
 - **默认安全。** 默认只监听 `127.0.0.1`；绑定局域网地址必须提供 token；所有写操作只接受 POST，WebSocket 校验同源。
 - **单文件部署。** HTML/CSS/JS 通过 `go:embed` 打进二进制；运行时只依赖 `adb` 和 `scrcpy-server`。
 
@@ -92,7 +92,7 @@ go run . --scrcpy-jar /path/to/scrcpy-server
 
 ### 界面语言
 
-内置英文和简体中文。`自动` 跟随 `navigator.languages`，手动选择会记在 `localStorage`；`?lang=en`、`?lang=zh-CN` 可以覆盖并记住选择。
+内置英文（`en`）、简体中文（`zh-CN`）、日语（`ja`）和越南语（`vi`）。`自动` 跟随 `navigator.languages`，手动选择会记在 `localStorage`；`?lang=ja`、`?lang=vi` 等参数可以覆盖并记住选择。
 
 所有文案都在 [`i18n.js`](i18n.js)：新增一个与 `en` 键名一致、带本地语言 `name` 的对象即可，菜单会自动出现。`node tools/check-i18n.js` 会校验各语言键是否齐全、是否有空值。
 

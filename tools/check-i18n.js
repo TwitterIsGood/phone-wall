@@ -6,10 +6,25 @@ const path = require("path");
 global.window = global;
 require(path.join(__dirname, "..", "i18n.js"));
 
-const locales = global.I18N.locales;
+const I18N = global.I18N;
+const locales = I18N.locales;
 const codes = Object.keys(locales);
 assert(codes.length >= 2, "expected at least two locales");
 assert(codes.includes("en"), "the English fallback is missing");
+
+// Language tags resolve to the locale objects above.
+const tags = {
+  "en-US": "en",
+  "zh": "zh-CN",
+  "zh-Hans": "zh-CN",
+  "ja-JP": "ja",
+  "vi-VN": "vi"
+};
+for (const [tag, code] of Object.entries(tags)) {
+  assert.strictEqual(I18N.normalize(tag), code, `${tag} should map to ${code}`);
+  assert(locales[code], `${code}: locale missing`);
+}
+assert.strictEqual(I18N.normalize("de-DE"), "", "unknown tags must fall through");
 
 const base = Object.keys(locales.en.strings).sort();
 for (const code of codes) {
