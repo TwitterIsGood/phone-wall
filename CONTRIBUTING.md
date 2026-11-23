@@ -46,5 +46,8 @@ docs: explain the token flow
 
 ## Pull requests
 
-Fill in the PR template, keep the diff focused, and make sure CI is green on
-Linux, macOS and Windows.
+Fill in the PR template, keep the diff focused, and make sure the Linux and
+Windows CI jobs are green. macOS is a manual workflow in the Actions tab
+because hosted macOS runners are often unavailable; run it if you touch
+platform-specific code. The release workflow still builds darwin/amd64 and
+darwin/arm64.

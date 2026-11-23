@@ -1,0 +1,23 @@
+name: macOS
+
+# Run from the Actions tab. Kept out of the push/PR matrix because hosted
+# macOS runners are often unavailable; the release workflow still builds
+# darwin/amd64 and darwin/arm64.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - run: go vet ./...
+      - run: go test ./...
+      - run: go build ./...

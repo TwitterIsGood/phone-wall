@@ -25,7 +25,8 @@ All notable changes to this project are documented here. The format follows
   same-origin WebSocket checks.
 - English and Simplified Chinese UI with automatic browser detection, a manual
   language menu, and a `?lang=` override, embedded in a single binary.
-- CI on Linux, macOS and Windows; cross-platform release builds.
+- CI on Linux and Windows, with a manual macOS workflow; cross-platform release
+  builds.
 
 [Unreleased]: https://github.com/TwitterIsGood/phone-wall/compare/v0.1.0...HEAD
 [0.1.0]: https://github.com/TwitterIsGood/phone-wall/releases/tag/v0.1.0
