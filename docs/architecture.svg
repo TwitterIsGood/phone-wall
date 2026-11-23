@@ -1,0 +1,127 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="620" viewBox="0 0 1280 620" role="img" aria-label="Phone Wall architecture: Android phones connect over adb to scrcpy-server, a Go session hub fans H.264 NAL units out over WebSocket to browser VideoDecoder canvases.">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#6b7280"/>
+    </marker>
+    <style>
+      .title{font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;font-size:34px;font-weight:700;fill:#111827}
+      .sub{font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;font-size:15px;fill:#6b7280}
+      .h{font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;font-size:17px;font-weight:600;fill:#111827}
+      .small{font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;font-size:12px;fill:#6b7280}
+      .body{font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;font-size:13px;fill:#374151}
+      .label{font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;font-size:12px;fill:#6b7280}
+      .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px;fill:#374151}
+      .box{fill:#ffffff;stroke:#d1d5db;stroke-width:1.5}
+      .accent{fill:#eef2ff;stroke:#93c5fd;stroke-width:1.5}
+      .phone{fill:#ffffff;stroke:#d1d5db;stroke-width:1.5}
+      .screen{fill:#111827}
+      .tile{fill:#111827}
+      .tilein{fill:#1f2937}
+      .dotg{fill:#16a34a}
+    </style>
+  </defs>
+
+  <rect width="1280" height="620" fill="#f7f8fa"/>
+
+  <text x="60" y="64" class="title">Phone Wall</text>
+  <text x="60" y="94" class="sub">physical Android devices &#8594; one browser page</text>
+
+  <!-- devices -->
+  <text x="60" y="132" class="label">ANDROID DEVICES</text>
+  <g>
+    <rect x="60" y="150" width="170" height="88" rx="12" class="phone"/>
+    <rect x="74" y="162" width="42" height="64" rx="6" class="screen"/>
+    <circle cx="95" cy="219" r="2" fill="#4b5563"/>
+    <text x="130" y="180" class="h">Phone A</text>
+    <text x="130" y="201" class="small">USB</text>
+
+    <rect x="60" y="252" width="170" height="88" rx="12" class="phone"/>
+    <rect x="74" y="264" width="42" height="64" rx="6" class="screen"/>
+    <circle cx="95" cy="321" r="2" fill="#4b5563"/>
+    <text x="130" y="282" class="h">Phone B</text>
+    <text x="130" y="303" class="small">USB</text>
+
+    <rect x="60" y="354" width="170" height="88" rx="12" class="phone"/>
+    <rect x="74" y="366" width="42" height="64" rx="6" class="screen"/>
+    <circle cx="95" cy="423" r="2" fill="#4b5563"/>
+    <text x="130" y="384" class="h">Phone C</text>
+    <text x="130" y="405" class="small">Wi-Fi ADB</text>
+  </g>
+
+  <!-- arrow: adb -->
+  <line x1="238" y1="300" x2="312" y2="300" stroke="#6b7280" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <text x="242" y="287" class="label">adb</text>
+  <text x="242" y="324" class="label">forward</text>
+
+  <!-- scrcpy server -->
+  <rect x="320" y="172" width="250" height="256" rx="14" class="accent"/>
+  <text x="340" y="204" class="h">scrcpy-server</text>
+  <text x="340" y="225" class="small">on the device</text>
+  <circle cx="346" cy="256" r="2.5" fill="#3b82f6"/>
+  <text x="360" y="261" class="body">raw H.264 stream</text>
+  <circle cx="346" cy="286" r="2.5" fill="#3b82f6"/>
+  <text x="360" y="291" class="body">control socket</text>
+  <circle cx="346" cy="316" r="2.5" fill="#3b82f6"/>
+  <text x="360" y="321" class="body">tunnel_forward</text>
+  <circle cx="346" cy="346" r="2.5" fill="#3b82f6"/>
+  <text x="360" y="351" class="body">stay_awake</text>
+  <text x="340" y="398" class="mono">android 5+</text>
+
+  <!-- arrow: tcp -->
+  <line x1="578" y1="300" x2="644" y2="300" stroke="#6b7280" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <text x="585" y="287" class="label">TCP</text>
+  <text x="585" y="324" class="label">video + ctrl</text>
+
+  <!-- go hub -->
+  <rect x="652" y="172" width="224" height="256" rx="14" class="box"/>
+  <text x="672" y="204" class="h">Go session hub</text>
+  <text x="672" y="225" class="small">one session per device</text>
+  <circle cx="678" cy="256" r="2.5" fill="#16a34a"/>
+  <text x="692" y="261" class="body">NAL splitter</text>
+  <circle cx="678" cy="286" r="2.5" fill="#16a34a"/>
+  <text x="692" y="291" class="body">SPS / PPS + IDR cache</text>
+  <circle cx="678" cy="316" r="2.5" fill="#16a34a"/>
+  <text x="692" y="321" class="body">WebSocket fan-out</text>
+  <circle cx="678" cy="346" r="2.5" fill="#16a34a"/>
+  <text x="692" y="351" class="body">30 s idle teardown</text>
+  <text x="672" y="398" class="mono">embedded UI + auth</text>
+
+  <!-- arrow: ws -->
+  <line x1="882" y1="300" x2="948" y2="300" stroke="#6b7280" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <text x="893" y="287" class="label">WS</text>
+  <text x="893" y="324" class="label">Annex-B NAL</text>
+
+  <!-- browser -->
+  <rect x="956" y="150" width="264" height="300" rx="14" class="box"/>
+  <circle cx="974" cy="170" r="3.5" fill="#ef4444"/>
+  <circle cx="986" cy="170" r="3.5" fill="#eab308"/>
+  <circle cx="998" cy="170" r="3.5" fill="#22c55e"/>
+  <text x="1012" y="175" class="small">Phone Wall</text>
+
+  <rect x="974" y="192" width="108" height="120" rx="8" class="tile"/>
+  <rect x="983" y="201" width="90" height="94" rx="4" class="tilein"/>
+  <circle cx="1028" cy="248" r="14" fill="#0b1220" stroke="#374151"/>
+  <rect x="1094" y="192" width="108" height="120" rx="8" class="tile"/>
+  <rect x="1103" y="201" width="90" height="94" rx="4" class="tilein"/>
+  <circle cx="1148" cy="248" r="14" fill="#0b1220" stroke="#374151"/>
+
+  <rect x="974" y="324" width="108" height="76" rx="8" class="tile"/>
+  <rect x="983" y="333" width="90" height="50" rx="4" class="tilein"/>
+  <rect x="1094" y="324" width="108" height="76" rx="8" class="tile"/>
+  <rect x="1103" y="333" width="90" height="50" rx="4" class="tilein"/>
+
+  <text x="974" y="424" class="body">VideoDecoder &#8594; canvas</text>
+  <text x="974" y="442" class="small">Chrome / Edge, WebCodecs</text>
+
+  <!-- bottom -->
+  <line x1="60" y1="500" x2="1220" y2="500" stroke="#e5e7eb" stroke-width="1"/>
+  <circle cx="66" cy="535" r="3.5" class="dotg"/>
+  <text x="78" y="540" class="body">one static binary</text>
+  <circle cx="230" cy="535" r="3.5" class="dotg"/>
+  <text x="242" y="540" class="body">HTML / CSS / JS embedded</text>
+  <circle cx="440" cy="535" r="3.5" class="dotg"/>
+  <text x="452" y="540" class="body">loopback by default</text>
+  <circle cx="620" cy="535" r="3.5" class="dotg"/>
+  <text x="632" y="540" class="body">token for LAN access</text>
+  <text x="60" y="580" class="small">scrcpy-server is fetched from the upstream scrcpy release (Apache-2.0) and is not bundled.</text>
+</svg>

@@ -1,0 +1,331 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>Phone Wall</title>
+<style>
+ *{box-sizing:border-box}
+ html,body{margin:0;min-height:100%;background:#111;color:#eee;font:14px system-ui,-apple-system,"Segoe UI",sans-serif}
+ body{overflow:auto;overscroll-behavior:none}
+ header{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:8px 10px;background:#1b1b1b;position:sticky;top:0;z-index:10}
+ header .title{font-weight:700;margin-right:auto;white-space:nowrap}
+ header .sub{color:#888;font-size:12px}
+ header button,header a.btn{background:#2b2b2b;color:#eee;border:1px solid #444;border-radius:8px;padding:7px 10px;font:inherit;text-decoration:none;cursor:pointer}
+ #grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:10px;padding:10px;align-items:start}
+ .empty{grid-column:1/-1;color:#888;text-align:center;padding:40px 16px;line-height:1.6}
+ .tile{position:relative;background:#1b1b1b;border:1px solid #2c2c2c;border-radius:10px;padding:6px;display:flex;flex-direction:column;align-items:center;min-width:0}
+ .tnav{position:absolute;left:50%;bottom:10px;transform:translateX(-50%);z-index:5;display:flex;gap:4px;padding:4px 6px;background:rgba(15,15,15,.62);border:1px solid rgba(255,255,255,.12);border-radius:999px;backdrop-filter:blur(6px)}
+ .tnav button{width:38px;height:30px;border-radius:999px;background:transparent;color:#eee;border:0;cursor:pointer;font:15px system-ui;line-height:1;opacity:.9}
+ .tnav button:hover{background:rgba(255,255,255,.14);opacity:1}
+ .thead{display:flex;align-items:center;gap:6px;width:100%;padding:2px 4px 6px;min-width:0}
+ .tname{color:#ddd;text-decoration:none;font-weight:600;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+ .tname:hover{color:#fff}
+ .dot{width:9px;height:9px;border-radius:50%;background:#777;display:inline-block;flex:none}
+ .dot.on{background:#22c55e;box-shadow:0 0 6px #22c55e}
+ .dot.off{background:#ef4444;box-shadow:0 0 6px #ef4444}
+ .dot.unknown{background:#eab308}
+ .tcanvas{width:100%;height:auto;max-width:100%;display:block;background:#000;border-radius:6px;touch-action:none;user-select:none;-webkit-user-drag:none}
+ .tile.offline .tcanvas{opacity:.35}
+ #toast{position:fixed;left:50%;bottom:12px;transform:translateX(-50%);background:rgba(0,0,0,.8);color:#ddd;padding:6px 12px;border-radius:999px;font-size:12px;display:none;z-index:20}
+</style></head><body>
+<header>
+ <span class="title" id="ttl">Phone Wall</span>
+ <span class="sub" id="sub"></span>
+ <a class="btn" id="singleLink" href="/">Single</a>
+</header>
+<div id="grid"></div>
+<div id="toast"></div>
+<script>
+const ZH=(navigator.language||'en').toLowerCase().startsWith('zh');
+const S=ZH?{
+ ttl:'手机墙', sub:'每个画面独立控制', single:'单屏', back:'返回', home:'主页', recents:'后台',
+ open:'打开单屏', empty:'没有检测到设备。用 USB 连接手机并开启 USB 调试，或创建 devices.json。'
+}:{
+ ttl:'Phone Wall', sub:'every tile is independently controllable', single:'Single view', back:'Back', home:'Home', recents:'Recents',
+ open:'Open single view', empty:'No devices found. Connect a phone over USB with debugging enabled, or create devices.json.'
+};
+document.documentElement.lang=ZH?'zh':'en';
+document.title=S.ttl;
+document.getElementById('ttl').textContent=S.ttl;
+document.getElementById('sub').textContent=S.sub;
+document.getElementById('singleLink').textContent=S.single;
+
+const GRID=document.getElementById('grid');
+let tiles=[];
+let cur=localStorage.getItem('pm_dev')||'';
+document.getElementById('singleLink').href='/?dev='+encodeURIComponent(cur);
+function toast(t){const e=document.getElementById('toast');e.textContent=t;e.style.display='block';clearTimeout(toast._t);toast._t=setTimeout(()=>e.style.display='none',1500);}
+function post(path){return fetch(path,{method:'POST'});}
+async function loadDevices(){
+  const r=await fetch('/devices'); const d=await r.json();
+  GRID.innerHTML=''; tiles=[];
+  (d.devices||[]).forEach(o=>{
+    if(typeof o==='string') o={key:o,name:o};
+    tiles.push(new Tile(o.key,o.name));
+  });
+  if(!tiles.length){
+    const e=document.createElement('div'); e.className='empty'; e.textContent=S.empty;
+    GRID.appendChild(e);
+  }
+  updateStatus();
+}
+function dotFor(key){return document.getElementById('dot_'+key);}
+async function updateStatus(){
+  try{
+    const r=await fetch('/status'); const d=await r.json(); const st=d.status||{};
+    tiles.forEach(t=>{ t.setStatus(st[t.key]||'unknown'); });
+  }catch(e){}
+  setTimeout(updateStatus,2000);
+}
+class Tile{
+  constructor(key,name){
+    this.key=key; this.name=name;
+    this.el=document.createElement('div'); this.el.className='tile';
+    const head=document.createElement('div'); head.className='thead';
+    this.dot=document.createElement('span'); this.dot.className='dot'; this.dot.id='dot_'+key;
+    const a=document.createElement('a'); a.className='tname'; a.textContent=name;
+    a.href='/?dev='+encodeURIComponent(key); a.target='_blank'; a.title=S.open;
+    head.appendChild(this.dot); head.appendChild(a);
+    this.nav=document.createElement('div'); this.nav.className='tnav';
+    [['back','◀'],['home','●'],['recents','■']].forEach(([k,ic])=>{
+      const b=document.createElement('button'); b.type='button'; b.textContent=ic; b.title=S[k];
+      b.onclick=(e)=>{e.stopPropagation();this.navKey(k);};
+      this.nav.appendChild(b);
+    });
+    this.canvas=document.createElement('canvas'); this.canvas.className='tcanvas';
+    this.canvas.width=270; this.canvas.height=600;
+    this.ctx=this.canvas.getContext('2d',{alpha:false,desynchronized:true});
+    this.el.appendChild(head); this.el.appendChild(this.canvas); this.el.appendChild(this.nav);
+    GRID.appendChild(this.el);
+    this.gen=0; this.ws=null; this.wsReady=false; this.wsInput=false;
+    this.decoder=null; this.cfgKey=''; this.sps=null; this.pps=null; this.pend=[]; this.ts=0;
+    this.buf=new Uint8Array(0); this.lastChunk=0; this.idle=0; this.frameCount=0;
+    this.g=null; this.lastMove=0;
+    this.bindInput();
+    this.connect();
+  }
+  bootstrap(my){
+    fetch(`/frame/${encodeURIComponent(this.key)}?t=${Date.now()}`,{cache:'no-store'})
+      .then(r=>r.ok?r.blob():null).then(b=>{
+        if(!b||my!==this.gen||this.frameCount>0) return;
+        const u=URL.createObjectURL(b); const im=new Image();
+        im.onload=()=>{
+          if(my===this.gen&&this.frameCount===0){
+            if(this.canvas.width!==im.naturalWidth||this.canvas.height!==im.naturalHeight){
+              this.canvas.width=im.naturalWidth; this.canvas.height=im.naturalHeight;
+            }
+            this.ctx.drawImage(im,0,0);
+          }
+          URL.revokeObjectURL(u);
+        };
+        im.onerror=()=>URL.revokeObjectURL(u);
+        im.src=u;
+      }).catch(()=>{});
+  }
+  setStatus(s){
+    this.dot.className='dot '+(s==='device'?'on':s==='offline'?'off':'unknown');
+    this.el.classList.toggle('offline',s==='offline');
+  }
+  stop(){
+    this.gen++;
+    if(this.ws){try{this.ws.onmessage=this.ws.onclose=this.ws.onerror=null;this.ws.close();}catch(e){} this.ws=null;}
+    this.wsReady=false; this.wsInput=false;
+    if(this.idle){clearInterval(this.idle); this.idle=0;}
+    if(this.decoder){try{this.decoder.close();}catch(e){} this.decoder=null;}
+    this.cfgKey=''; this.sps=null; this.pps=null; this.pend=[]; this.ts=0; this.frameCount=0; this.buf=new Uint8Array(0);
+    try{this.ctx.fillStyle='#000';this.ctx.fillRect(0,0,this.canvas.width,this.canvas.height);}catch(e){}
+  }
+  connect(){
+    this.stop();
+    const my=this.gen;
+    this.bootstrap(my);
+    let sock;
+    try{
+      const scheme=location.protocol==='https:'?'wss':'ws';
+      sock=new WebSocket(`${scheme}://${location.host}/ws?dev=${encodeURIComponent(this.key)}&tile=1`);
+    }
+    catch(e){this.retry(my);return;}
+    this.ws=sock; sock.binaryType='arraybuffer';
+    sock.onmessage=e=>{
+      if(my!==this.gen) return;
+      if(typeof e.data==='string'){
+        let m; try{m=JSON.parse(e.data);}catch(_){return;}
+        if(m.ready){this.wsReady=true; this.wsInput=true;}
+        if(m.mode==='screenrecord'){this.wsReady=true; this.wsInput=false;}
+        return;
+      }
+      this.wsReady=true;
+      this.lastChunk=performance.now();
+      const chunk=new Uint8Array(e.data);
+      const nb=new Uint8Array(this.buf.length+chunk.length); nb.set(this.buf); nb.set(chunk,this.buf.length); this.buf=nb;
+      const r=this.extract(this.buf,false); this.buf=r.rest;
+      for(const nal of r.nals){ if(my!==this.gen) return; this.handleNal(nal,my); }
+    };
+    sock.onclose=()=>{
+      if(my!==this.gen) return;
+      this.wsReady=false; this.wsInput=false;
+      if(this.ws===sock) this.ws=null;
+      if(this.idle){clearInterval(this.idle); this.idle=0;}
+      this.retry(my);
+    };
+    sock.onerror=()=>{try{sock.close();}catch(e){}};
+    this.idle=setInterval(()=>{
+      if(my!==this.gen){clearInterval(this.idle);return;}
+      if(this.buf.length && performance.now()-this.lastChunk>150){
+        const r=this.extract(this.buf,true); this.buf=r.rest;
+        for(const nal of r.nals){ if(my!==this.gen) return; this.handleNal(nal,my); }
+      }
+    },80);
+  }
+  retry(my){
+    if(my!==this.gen) return;
+    setTimeout(()=>{ if(my===this.gen) this.connect(); },1000);
+  }
+  extract(buf,flush){
+    const nals=[]; let i=0, nalStart=-1;
+    while(i+3<=buf.length){
+      let scLen=0;
+      if(buf[i]===0&&buf[i+1]===0&&buf[i+2]===1) scLen=3;
+      else if(i+4<=buf.length&&buf[i]===0&&buf[i+1]===0&&buf[i+2]===0&&buf[i+3]===1) scLen=4;
+      if(scLen){
+        if(nalStart>=0){
+          let end=i; while(end>nalStart&&buf[end-1]===0) end--;
+          if(end>nalStart) nals.push(buf.slice(nalStart,end));
+        }
+        i+=scLen; nalStart=i; continue;
+      }
+      i++;
+    }
+    if(flush&&nalStart>=0){
+      let end=buf.length; while(end>nalStart&&buf[end-1]===0) end--;
+      if(end>nalStart) nals.push(buf.slice(nalStart,end));
+      return {nals, rest:new Uint8Array(0)};
+    }
+    if(nalStart>=0) return {nals, rest:buf.slice(Math.max(0,nalStart-4))};
+    return {nals, rest:buf.slice(Math.max(0,buf.length-4))};
+  }
+  handleNal(nal,my){
+    if(!nal.length) return;
+    const t=nal[0]&0x1f;
+    if(t===7||t===8){
+      if(t===7) this.sps=nal; else this.pps=nal;
+      this.pend.push(nal);
+      if(this.sps&&this.pps) this.configure(my);
+      return;
+    }
+    if(t===1||t===5){
+      const aus=this.pend.concat([nal]); this.pend=[];
+      this.feed(aus,t===5,my);
+    }else{
+      this.pend.push(nal); if(this.pend.length>8) this.pend.shift();
+    }
+  }
+  configure(my){
+    if(!this.sps||!this.pps||my!==this.gen) return;
+    const key=this.sps.length+':'+this.sps[1]+':'+this.sps[2]+':'+this.sps[3]+':'+this.pps.length;
+    if(this.decoder&&this.cfgKey===key) return;
+    const codec='avc1.'+[this.sps[1],this.sps[2],this.sps[3]].map(b=>b.toString(16).padStart(2,'0')).join('');
+    const sps=this.sps, pps=this.pps;
+    const desc=new Uint8Array(8+sps.length+3+pps.length);
+    let o=0;
+    desc[o++]=1; desc[o++]=sps[1]; desc[o++]=sps[2]; desc[o++]=sps[3]; desc[o++]=0xff; desc[o++]=0xe1;
+    desc[o++]=(sps.length>>8)&255; desc[o++]=sps.length&255; desc.set(sps,o); o+=sps.length;
+    desc[o++]=1; desc[o++]=(pps.length>>8)&255; desc[o++]=pps.length&255; desc.set(pps,o); o+=pps.length;
+    try{
+      if(this.decoder){try{this.decoder.close();}catch(e){}}
+      const dec=new VideoDecoder({
+        output:(f)=>{
+          if(my!==this.gen){f.close();return;}
+          this.frameCount++;
+          if(this.canvas.width!==f.displayWidth||this.canvas.height!==f.displayHeight){
+            this.canvas.width=f.displayWidth; this.canvas.height=f.displayHeight;
+          }
+          this.ctx.drawImage(f,0,0); f.close();
+        },
+        error:(e)=>{
+          console.warn('tile decode',this.key,e);
+          if(this.decoder===dec){this.decoder=null; this.cfgKey='';}
+          if(my===this.gen){try{this.ws&&this.ws.close();}catch(_){}}
+        }
+      });
+      dec.configure({codec,description:desc.subarray(0,o),optimizeForLatency:true});
+      this.decoder=dec; this.cfgKey=key;
+    }catch(e){
+      console.warn('tile configure',this.key,e);
+      this.decoder=null; this.cfgKey='';
+      if(my===this.gen){try{this.ws&&this.ws.close();}catch(_){}}
+    }
+  }
+  feed(aus,isKey,my){
+    if(my!==this.gen||!this.decoder) return;
+    let total=0; for(const n of aus) total+=4+n.length;
+    if(!total) return;
+    const data=new Uint8Array(total); let o=0;
+    for(const n of aus){
+      const l=n.length;
+      data[o++]=l>>>24; data[o++]=l>>>16; data[o++]=l>>>8; data[o++]=l;
+      data.set(n,o); o+=l;
+    }
+    try{this.decoder.decode(new EncodedVideoChunk({type:isKey?'key':'delta',timestamp:this.ts++,data}));}catch(e){}
+  }
+  norm(cx,cy){
+    const r=this.canvas.getBoundingClientRect();
+    if(!r.width||!r.height) return {nx:0,ny:0};
+    return {nx:Math.max(0,Math.min(1,(cx-r.left)/r.width)),
+            ny:Math.max(0,Math.min(1,(cy-r.top)/r.height))};
+  }
+  navKey(k){
+    if(this.wsReady&&this.wsInput&&this.ws&&this.ws.readyState===1){
+      try{this.ws.send(JSON.stringify({a:'key',k})); return;}catch(e){}
+    }
+    post(`/key/${encodeURIComponent(this.key)}?k=${k}`).catch(()=>{});
+  }
+  send(a,nx,ny){
+    if(this.wsReady&&this.wsInput&&this.ws&&this.ws.readyState===1){
+      const x=Math.round(nx*this.canvas.width), y=Math.round(ny*this.canvas.height);
+      try{this.ws.send(JSON.stringify({a,x,y,fw:this.canvas.width,fh:this.canvas.height})); return true;}catch(e){}
+    }
+    return false;
+  }
+  fallback(a,nx,ny,sx,sy,dur){
+    const w=this.canvas.width, h=this.canvas.height;
+    const x=Math.round(nx*w), y=Math.round(ny*h);
+    const q=`fw=${w}&fh=${h}`;
+    if(a==='swipe'){
+      const x1=Math.round((sx==null?nx:sx)*w), y1=Math.round((sy==null?ny:sy)*h);
+      post(`/swipe/${encodeURIComponent(this.key)}?x1=${x1}&y1=${y1}&x2=${x}&y2=${y}&d=${dur||300}&${q}`).catch(()=>{});
+    }else{
+      post(`/tap/${encodeURIComponent(this.key)}?x=${x}&y=${y}&${q}`).catch(()=>{});
+    }
+  }
+  bindInput(){
+    const el=this.canvas;
+    const start=(cx,cy)=>{this.g={sx:cx,sy:cy,n:this.norm(cx,cy),moved:false,t:Date.now(),live:false};
+      this.g.live=this.send('down',this.g.n.nx,this.g.n.ny);
+    };
+    const move=(cx,cy)=>{
+      if(!this.g) return;
+      if(Math.hypot(cx-this.g.sx,cy-this.g.sy)>8) this.g.moved=true;
+      const now=performance.now();
+      if(now-this.lastMove<12) return; this.lastMove=now;
+      const n=this.norm(cx,cy);
+      if(this.g.live) this.send('move',n.nx,n.ny);
+    };
+    const end=(cx,cy)=>{
+      if(!this.g) return; const gr=this.g; this.g=null;
+      const n=this.norm(cx,cy);
+      const sx=gr.n.nx, sy=gr.n.ny;
+      const dur=Math.max(80,Math.min(600,Date.now()-gr.t));
+      if(gr.live) this.send('up',n.nx,n.ny);
+      if(!gr.live) this.fallback(gr.moved?'swipe':'tap',n.nx,n.ny,sx,sy,dur);
+    };
+    el.addEventListener('touchstart',e=>{if(e.touches.length!==1)return;e.preventDefault();const t=e.touches[0];start(t.clientX,t.clientY);},{passive:false});
+    el.addEventListener('touchmove',e=>{if(!this.g)return;e.preventDefault();const t=e.touches[0];move(t.clientX,t.clientY);},{passive:false});
+    el.addEventListener('touchend',e=>{if(!this.g)return;e.preventDefault();const t=e.changedTouches[0];end(t.clientX,t.clientY);},{passive:false});
+    el.addEventListener('pointerdown',e=>{if(e.pointerType==='touch')return;e.preventDefault();try{el.setPointerCapture(e.pointerId);}catch(_){} start(e.clientX,e.clientY);});
+    el.addEventListener('pointermove',e=>{if(e.pointerType==='touch')return;if(this.g){e.preventDefault();move(e.clientX,e.clientY);}});
+    el.addEventListener('pointerup',e=>{if(e.pointerType==='touch')return;if(this.g){e.preventDefault();end(e.clientX,e.clientY);}});
+    el.addEventListener('contextmenu',e=>e.preventDefault());
+    document.addEventListener('touchmove',e=>{if(this.g)e.preventDefault();},{passive:false});
+  }
+}
+loadDevices();
+</script></body></html>

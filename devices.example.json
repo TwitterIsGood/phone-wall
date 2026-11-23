@@ -1,0 +1,19 @@
+{
+  "devices": [
+    {
+      "key": "pixel-1",
+      "name": "Pixel 8",
+      "serials": ["R58M123456A", "192.0.2.25:5555"]
+    },
+    {
+      "key": "pixel-2",
+      "name": "Pixel 8",
+      "serials": ["R58M654321B"]
+    },
+    {
+      "key": "oppo",
+      "name": "OPPO A57",
+      "serials": ["0123456789ABCDEF"]
+    }
+  ]
+}

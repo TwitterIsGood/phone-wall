@@ -1,0 +1,17 @@
+# runtime data (device serials and names)
+devices.json
+names.json
+
+# build output
+/dist/
+/phone-wall
+/phone-wall.exe
+*.exe
+*.test
+
+# logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db

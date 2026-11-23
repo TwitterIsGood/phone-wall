@@ -1,0 +1,464 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>Phone Wall</title>
+<style>
+ *{box-sizing:border-box}
+ html,body{margin:0;height:100%;overflow:hidden;overscroll-behavior:none;background:#111;color:#eee;font:14px system-ui,-apple-system,"Segoe UI",sans-serif}
+ body{display:flex;flex-direction:column;height:100dvh;min-width:0}
+ header{flex:0 0 auto;display:flex;gap:6px;flex-wrap:wrap;padding:8px;align-items:center;background:#1b1b1b;min-width:0}
+ header button{flex:0 0 auto;display:flex;align-items:center;gap:6px;background:#2b2b2b;color:#eee;border:1px solid #444;border-radius:8px;padding:8px 12px;font:inherit;transition:background .15s}
+ .dot{width:9px;height:9px;border-radius:50%;background:#777;display:inline-block}
+ .dot.on{background:#22c55e;box-shadow:0 0 6px #22c55e}
+ .dot.off{background:#ef4444;box-shadow:0 0 6px #ef4444}
+ .dot.unknown{background:#eab308}
+ #wrap{flex:1 1 auto;min-height:0;display:flex;align-items:center;justify-content:center;padding:6px}
+ #stage{position:relative;display:inline-block;border-radius:12px;overflow:hidden;box-shadow:0 0 0 2px #333;background:#000;touch-action:none;max-width:100%;max-height:100%}
+ #screen{display:block;touch-action:none;user-select:none;-webkit-user-drag:none;background:#000}
+ #loading{position:absolute;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:rgba(0,0,0,.82);color:#ddd;font-size:15px;text-align:center;padding:20px;pointer-events:none}
+ #loading.show{display:flex}
+ #loading.off .spinner{display:none}
+ #loading.off #loadtxt{color:#f87171;font-weight:600}
+ .spinner{width:44px;height:44px;border-radius:50%;border:4px solid #333;border-top-color:#4c8dff;animation:spin .8s linear infinite}
+ @keyframes spin{to{transform:rotate(360deg)}}
+ #watermark{position:absolute;top:10px;left:10px;padding:4px 10px;border-radius:999px;font-weight:700;font-size:14px;color:#fff;background:rgba(0,0,0,.55);pointer-events:none}
+ #warn{flex:0 0 auto;display:none;margin:0 10px 8px;padding:8px 12px;border-radius:8px;background:#3a2a12;color:#fbbf24;font-size:13px;text-align:center}
+ #warn.show{display:block}
+ .bar{flex:0 0 auto;display:flex;flex-direction:column;gap:6px;padding:8px 10px calc(8px + env(safe-area-inset-bottom));background:#151515;min-width:0}
+ .keys,.txtrow{display:flex;gap:6px;justify-content:center;flex-wrap:wrap;align-items:center;min-width:0}
+ .bar button{background:#2b2b2b;color:#eee;border:1px solid #444;border-radius:8px;padding:8px 10px;font:inherit}
+ input[type=text]{background:#1b1b1b;border:1px solid #444;color:#eee;border-radius:8px;padding:8px;flex:1 1 100px;min-width:0;width:auto}
+ @media (max-width:520px){
+   header{padding:6px} header button{padding:7px 9px;font-size:13px}
+   #wrap{padding:4px} .bar{padding:6px 8px calc(6px + env(safe-area-inset-bottom))}
+   .bar button{padding:8px 8px;font-size:13px}
+ }
+</style></head><body>
+<header id="tabs"></header>
+<div id="warn"></div>
+<div id="wrap">
+ <div id="stage">
+  <canvas id="screen" width="480" height="1067"></canvas>
+  <div id="loading"><div class="spinner"></div><div id="loadtxt">Connecting…</div></div>
+  <div id="watermark"></div>
+ </div>
+</div>
+<div class="bar">
+ <div class="keys">
+  <button id="bBack">← Back</button>
+  <button id="bRecents">Recents</button>
+  <button id="bHome">Home</button>
+  <button id="bEnter">Enter</button>
+  <button id="bWake">Wake</button>
+  <button id="bRename">✎ Rename</button>
+  <a id="bGrid" href="/grid" style="background:#2b2b2b;color:#eee;border:1px solid #444;border-radius:8px;padding:8px 10px;font:inherit;text-decoration:none;display:inline-block">Grid</a>
+ </div>
+ <div class="txtrow">
+  <input type="text" id="txt" enterkeyhint="send">
+  <button id="bType">Type</button>
+ </div>
+</div>
+<script>
+const ZH=(navigator.language||'en').toLowerCase().startsWith('zh');
+const S=ZH?{
+ back:'← 返回', recents:'后台', home:'Home', enter:'Enter', wake:'唤醒', rename:'✎ 改名', grid:'平铺', type:'输入', ph:'输入文字…',
+ connecting:'正在连接', reconnecting:'正在重连', detecting:'正在检测', offline:'设备已断开', offlineHint:'请检查 USB 线 / USB 拓展坞',
+ renamePrompt:'设备显示名称（留空恢复默认）：',
+ insecure:'当前地址不是安全上下文，只能回退低清画面。请改用',
+ noDevices:'没有检测到设备。用 USB 连接手机并开启 USB 调试，或创建 devices.json。'
+}:{
+ back:'← Back', recents:'Recents', home:'Home', enter:'Enter', wake:'Wake', rename:'✎ Rename', grid:'Grid', type:'Type', ph:'type text…',
+ connecting:'Connecting to', reconnecting:'Reconnecting to', detecting:'Checking', offline:'Device disconnected', offlineHint:'Check the USB cable or hub',
+ renamePrompt:'Display name (leave empty to reset):',
+ insecure:'This origin is not a secure context, so only the low-quality fallback works. Open',
+ noDevices:'No devices found. Connect a phone over USB with debugging enabled, or create devices.json.'
+};
+document.documentElement.lang=ZH?'zh':'en';
+document.title='Phone Wall';
+for(const [id,key] of [['bBack','back'],['bRecents','recents'],['bHome','home'],['bEnter','enter'],['bWake','wake'],['bRename','rename'],['bGrid','grid'],['bType','type']]){
+  document.getElementById(id).textContent=S[key];
+}
+document.getElementById('txt').placeholder=S.ph;
+
+const CANVAS=document.getElementById('screen');
+const STAGE=document.getElementById('stage');
+const WRAP=document.getElementById('wrap');
+const CTX=CANVAS.getContext('2d',{alpha:false,desynchronized:true});
+const LOADING=document.getElementById('loading');
+const LOADTXT=document.getElementById('loadtxt');
+const WATERMARK=document.getElementById('watermark');
+let cur=new URLSearchParams(location.search).get('dev')||localStorage.getItem('pm_dev')||'';
+let status={}, offlineShown=false, loadingTimer=0, devNames={};
+let gen=0, ws=null, wsReady=false, wsInput=false;
+let decoder=null, configuredKey='', sps=null, pps=null, pend=[], ts=0, frameCount=0;
+let buf=new Uint8Array(0), lastChunk=0, idleTimer=0, lastMoveMs=0;
+
+function showLoading(t,off){LOADTXT.textContent=t;LOADING.classList.toggle('off',!!off);LOADING.classList.add('show');}
+function hideLoading(){LOADING.classList.remove('show');}
+function displayNameOf(k){return devNames[k]||k;}
+function setWatermark(){WATERMARK.textContent=displayNameOf(cur);}
+function post(path){return fetch(path,{method:'POST'});}
+function checkSecure(){
+  const h=location.hostname;
+  const local=(h==='127.0.0.1'||h==='localhost'||h==='::1');
+  if(!(window.VideoDecoder&&window.ReadableStream)&&!local){
+    const w=document.getElementById('warn');
+    const u=`http://127.0.0.1:${location.port}/?dev=${encodeURIComponent(cur)}`;
+    w.innerHTML=`${S.insecure} <a href="${u}" style="color:#fbbf24;font-weight:700">http://127.0.0.1:${location.port}</a>`;
+    w.classList.add('show');
+  }
+}
+function emptyState(){
+  showLoading(S.noDevices,true);
+}
+async function loadDevices(){
+  const r=await fetch('/devices'); const d=await r.json();
+  const tabs=document.getElementById('tabs'); tabs.innerHTML='';
+  devNames={};
+  (d.devices||[]).forEach(o=>{
+    if(typeof o==='string') o={key:o,name:o};
+    devNames[o.key]=o.name;
+    const b=document.createElement('button');
+    b.dataset.key=o.key;
+    const dot=document.createElement('span'); dot.className='dot'; dot.id='dot_'+o.key;
+    b.appendChild(dot); b.appendChild(document.createTextNode(o.name));
+    b.onclick=()=>switchDev(o.key);
+    tabs.appendChild(b);
+  });
+  if(!devNames[cur]){
+    const keys=Object.keys(devNames);
+    if(keys.length) cur=keys[0];
+  }
+  return Object.keys(devNames).length>0;
+}
+function refreshTabs(){
+  [...document.querySelectorAll('#tabs button')].forEach(b=>{
+    const on=b.dataset.key===cur;
+    b.style.background=on?'#2d6cdf':'#242424';
+    b.style.color=on?'#fff':'#ccc';
+    b.style.borderColor=on?'#2d6cdf':'transparent';
+  });
+  setWatermark();
+}
+async function renameCurrent(){
+  const now=displayNameOf(cur);
+  const nm=prompt(S.renamePrompt, now);
+  if(nm===null) return;
+  try{
+    await post(`/rename/${encodeURIComponent(cur)}?name=${encodeURIComponent(nm.trim())}`);
+    await loadDevices(); refreshTabs();
+  }catch(e){}
+}
+function fitStage(){
+  const box=WRAP.getBoundingClientRect();
+  const cs=getComputedStyle(WRAP);
+  const padX=(parseFloat(cs.paddingLeft)||0)+(parseFloat(cs.paddingRight)||0);
+  const padY=(parseFloat(cs.paddingTop)||0)+(parseFloat(cs.paddingBottom)||0);
+  const nw=CANVAS.width||480, nh=CANVAS.height||1067;
+  if(!nw||!nh||!box.width||!box.height) return;
+  const ar=nw/nh;
+  let W=Math.max(40,box.width-padX-2), H=Math.max(40,box.height-padY-2);
+  if(W/H>ar) W=H*ar; else H=W/ar;
+  CANVAS.style.width=W+'px'; CANVAS.style.height=H+'px';
+}
+window.addEventListener('resize',fitStage);
+window.addEventListener('orientationchange',()=>setTimeout(fitStage,150));
+if(window.ResizeObserver) new ResizeObserver(()=>fitStage()).observe(WRAP);
+
+function stopVideo(){
+  gen++;
+  if(ws){ try{ws.onmessage=ws.onclose=ws.onerror=null; ws.close();}catch(e){} ws=null; }
+  wsReady=false; wsInput=false;
+  if(idleTimer){clearInterval(idleTimer); idleTimer=0;}
+  if(decoder){try{decoder.close()}catch(e){} decoder=null;}
+  configuredKey=''; sps=null; pps=null; pend=[]; ts=0; frameCount=0;
+  buf=new Uint8Array(0);
+  try{CTX.fillStyle='#000'; CTX.fillRect(0,0,CANVAS.width,CANVAS.height);}catch(e){}
+}
+function bootstrapFrame(my){
+  fetch(`/frame/${encodeURIComponent(cur)}?t=${Date.now()}`,{cache:'no-store'})
+    .then(r=>r.ok?r.blob():null).then(b=>{
+      if(!b||my!==gen||frameCount>0) return;
+      const u=URL.createObjectURL(b); const im=new Image();
+      im.onload=()=>{
+        if(my===gen&&frameCount===0){
+          if(CANVAS.width!==im.naturalWidth||CANVAS.height!==im.naturalHeight){
+            CANVAS.width=im.naturalWidth; CANVAS.height=im.naturalHeight; fitStage();
+          }
+          CTX.drawImage(im,0,0); hideLoading();
+        }
+        URL.revokeObjectURL(u);
+      };
+      im.onerror=()=>URL.revokeObjectURL(u);
+      im.src=u;
+    }).catch(()=>{});
+}
+function connectWS(){
+  stopVideo();
+  const my=gen;
+  showLoading(S.connecting+' '+displayNameOf(cur)+' …');
+  bootstrapFrame(my);
+  let sock;
+  try{
+    sock=new WebSocket(`${location.protocol==='https:'?'wss':'ws'}://${location.host}/ws?dev=${encodeURIComponent(cur)}`);
+  }catch(e){ scheduleReconnect(my); return; }
+  ws=sock; sock.binaryType='arraybuffer'; lastChunk=performance.now();
+  sock.onmessage=e=>{
+    if(my!==gen) return;
+    if(typeof e.data==='string'){
+      let m; try{m=JSON.parse(e.data)}catch(_){return}
+      if(m.ready){ wsReady=true; wsInput=true; }
+      if(m.mode==='screenrecord'){ wsReady=true; wsInput=false; }
+      if(m.error) console.warn('mirror:', m.error);
+      return;
+    }
+    wsReady=true;
+    lastChunk=performance.now();
+    const chunk=new Uint8Array(e.data);
+    const nb=new Uint8Array(buf.length+chunk.length); nb.set(buf); nb.set(chunk,buf.length); buf=nb;
+    const r=extractNals(buf,false); buf=r.rest;
+    for(const nal of r.nals){ if(my!==gen) return; handleNal(nal,my); }
+  };
+  sock.onclose=()=>{
+    if(my!==gen) return;
+    wsReady=false; wsInput=false;
+    if(ws===sock) ws=null;
+    if(idleTimer){clearInterval(idleTimer); idleTimer=0;}
+    showLoading(S.reconnecting+' '+displayNameOf(cur)+' …');
+    scheduleReconnect(my);
+  };
+  sock.onerror=()=>{ try{sock.close()}catch(e){} };
+  idleTimer=setInterval(()=>{
+    if(my!==gen){clearInterval(idleTimer);return;}
+    if(buf.length && performance.now()-lastChunk>150){
+      const r=extractNals(buf,true); buf=r.rest;
+      for(const nal of r.nals){ if(my!==gen) return; handleNal(nal,my); }
+    }
+  },80);
+  clearTimeout(loadingTimer);
+  loadingTimer=setTimeout(()=>{ if(my===gen) hideLoading(); },2500);
+}
+function scheduleReconnect(my){
+  if(my!==gen) return;
+  setTimeout(()=>{ if(my===gen) connectWS(); },1000);
+}
+function extractNals(buf, flush){
+  const nals=[]; let i=0, nalStart=-1;
+  while(i+3<=buf.length){
+    let scLen=0;
+    if(buf[i]===0&&buf[i+1]===0&&buf[i+2]===1) scLen=3;
+    else if(i+4<=buf.length&&buf[i]===0&&buf[i+1]===0&&buf[i+2]===0&&buf[i+3]===1) scLen=4;
+    if(scLen){
+      if(nalStart>=0){
+        let end=i;
+        while(end>nalStart&&buf[end-1]===0) end--;
+        if(end>nalStart) nals.push(buf.slice(nalStart,end));
+      }
+      i+=scLen; nalStart=i; continue;
+    }
+    i++;
+  }
+  if(flush&&nalStart>=0){
+    let end=buf.length;
+    while(end>nalStart&&buf[end-1]===0) end--;
+    if(end>nalStart) nals.push(buf.slice(nalStart,end));
+    return {nals, rest:new Uint8Array(0)};
+  }
+  if(nalStart>=0) return {nals, rest:buf.slice(Math.max(0,nalStart-4))};
+  return {nals, rest:buf.slice(Math.max(0,buf.length-4))};
+}
+function handleNal(nal,my){
+  if(!nal.length) return;
+  const t=nal[0]&0x1f;
+  if(t===7||t===8){
+    if(t===7) sps=nal; else pps=nal;
+    pend.push(nal);
+    if(sps&&pps) configureDecoder(my);
+    return;
+  }
+  if(t===1||t===5){
+    const aus=pend.concat([nal]); pend=[];
+    feedAU(aus,t===5,my);
+  }else{
+    pend.push(nal);
+    if(pend.length>8) pend.shift();
+  }
+}
+function configureDecoder(my){
+  if(!sps||!pps||my!==gen) return;
+  const key=sps.length+':'+sps[1]+':'+sps[2]+':'+sps[3]+':'+pps.length;
+  if(decoder&&configuredKey===key) return;
+  const codec='avc1.'+[sps[1],sps[2],sps[3]].map(b=>b.toString(16).padStart(2,'0')).join('');
+  const desc=new Uint8Array(8+sps.length+3+pps.length);
+  let o=0;
+  desc[o++]=1; desc[o++]=sps[1]; desc[o++]=sps[2]; desc[o++]=sps[3]; desc[o++]=0xff; desc[o++]=0xe1;
+  desc[o++]=(sps.length>>8)&255; desc[o++]=sps.length&255; desc.set(sps,o); o+=sps.length;
+  desc[o++]=1; desc[o++]=(pps.length>>8)&255; desc[o++]=pps.length&255; desc.set(pps,o); o+=pps.length;
+  try{
+    if(decoder){try{decoder.close()}catch(e){}}
+    const dec=new VideoDecoder({
+      output:(f)=>{
+        if(my!==gen){f.close();return;}
+        frameCount++;
+        if(CANVAS.width!==f.displayWidth||CANVAS.height!==f.displayHeight){
+          CANVAS.width=f.displayWidth; CANVAS.height=f.displayHeight; fitStage();
+        }
+        CTX.drawImage(f,0,0); f.close(); hideLoading();
+      },
+      error:(e)=>{
+        console.warn('decode error',e);
+        if(decoder===dec){decoder=null; configuredKey='';}
+        if(my===gen){ try{ws&&ws.close()}catch(_){} }
+      }
+    });
+    dec.configure({codec,description:desc.subarray(0,o),optimizeForLatency:true});
+    decoder=dec; configuredKey=key;
+  }catch(e){
+    console.warn('configure failed',e);
+    decoder=null; configuredKey='';
+    if(my===gen){ try{ws&&ws.close()}catch(_){} }
+  }
+}
+function feedAU(aus,isKey,my){
+  if(my!==gen||!decoder) return;
+  let total=0; for(const n of aus) total+=4+n.length;
+  if(!total) return;
+  const data=new Uint8Array(total); let o=0;
+  for(const n of aus){
+    const l=n.length;
+    data[o++]=l>>>24; data[o++]=l>>>16; data[o++]=l>>>8; data[o++]=l;
+    data.set(n,o); o+=l;
+  }
+  try{ decoder.decode(new EncodedVideoChunk({type:isKey?'key':'delta',timestamp:ts++,data})); }catch(e){}
+}
+async function updateStatus(){
+  try{
+    const r=await fetch('/status'); const d=await r.json(); status=d.status||{};
+    Object.keys(status).forEach(n=>{
+      const dot=document.getElementById('dot_'+n); if(!dot) return;
+      dot.className='dot '+(status[n]==='device'?'on':status[n]==='offline'?'off':'unknown');
+    });
+    if(status[cur]!=='device'){
+      if(!offlineShown){
+        offlineShown=true; stopVideo();
+        showLoading(status[cur]==='offline'
+          ? S.offline+': '+displayNameOf(cur)+'\n'+S.offlineHint
+          : S.detecting+' '+displayNameOf(cur)+' …', status[cur]==='offline');
+      }
+    }else if(offlineShown){
+      offlineShown=false; hideLoading(); connectWS();
+    }
+  }catch(e){}
+  setTimeout(updateStatus,2000);
+}
+function switchDev(n){
+  if(n===cur) return;
+  cur=n; localStorage.setItem('pm_dev',n);
+  refreshTabs();
+  offlineShown=false;
+  connectWS();
+  post(`/key/${encodeURIComponent(n)}?k=wake`).catch(()=>{});
+}
+// ---------------- input ----------------
+function ptFromClient(cx,cy){
+  const r=CANVAS.getBoundingClientRect();
+  const nw=CANVAS.width||480, nh=CANVAS.height||1067;
+  if(!r.width||!r.height) return {x:0,y:0,fw:nw,fh:nh};
+  return {x:Math.round((cx-r.left)*nw/r.width),
+          y:Math.round((cy-r.top)*nh/r.height), fw:nw, fh:nh};
+}
+function sendTap(p){return post(`/tap/${encodeURIComponent(cur)}?x=${p.x}&y=${p.y}&fw=${p.fw}&fh=${p.fh}`);}
+function sendSwipe(a,b,d){return post(`/swipe/${encodeURIComponent(cur)}?x1=${a.x}&y1=${a.y}&x2=${b.x}&y2=${b.y}&d=${d}&fw=${a.fw}&fh=${a.fh}`);}
+function wsSend(o){
+  if(ws&&ws.readyState===1){
+    try{ws.send(JSON.stringify(o)); return true;}catch(e){}
+  }
+  return false;
+}
+let g=null;
+function gStart(cx,cy){
+  const p=ptFromClient(cx,cy);
+  g={sx:cx,sy:cy,t:Date.now(),moved:false,
+     live:wsReady&&wsInput&&wsSend({a:'down',x:p.x,y:p.y,fw:p.fw,fh:p.fh})};
+}
+function gMove(cx,cy){
+  if(!g) return;
+  if(Math.hypot(cx-g.sx,cy-g.sy)>10) g.moved=true;
+  if(g.live){
+    const now=performance.now();
+    if(now-lastMoveMs>=12){
+      lastMoveMs=now;
+      const p=ptFromClient(cx,cy);
+      wsSend({a:'move',x:p.x,y:p.y,fw:p.fw,fh:p.fh});
+    }
+  }
+}
+function gEnd(cx,cy){
+  if(!g) return; const gr=g; g=null;
+  const p=ptFromClient(cx,cy);
+  if(gr.live){ wsSend({a:'up',x:p.x,y:p.y,fw:p.fw,fh:p.fh}); return; }
+  const s=ptFromClient(gr.sx,gr.sy);
+  const dur=Math.max(80,Math.min(600,Date.now()-gr.t));
+  if(gr.moved) sendSwipe(s,p,dur); else sendTap(p);
+}
+STAGE.addEventListener('touchstart',e=>{
+  if(e.touches.length!==1) return; e.preventDefault();
+  const t=e.touches[0]; gStart(t.clientX,t.clientY);
+},{passive:false});
+STAGE.addEventListener('touchmove',e=>{
+  if(!g) return; e.preventDefault();
+  const t=e.touches[0]; gMove(t.clientX,t.clientY);
+},{passive:false});
+STAGE.addEventListener('touchend',e=>{
+  if(!g) return; e.preventDefault();
+  const t=e.changedTouches[0]; gEnd(t.clientX,t.clientY);
+},{passive:false});
+STAGE.addEventListener('touchcancel',e=>{
+  if(!g) return;
+  const t=e.changedTouches&&e.changedTouches[0];
+  if(t) gEnd(t.clientX,t.clientY); else g=null;
+},{passive:false});
+STAGE.addEventListener('pointerdown',e=>{
+  if(e.pointerType==='touch') return;
+  e.preventDefault(); try{STAGE.setPointerCapture(e.pointerId);}catch(_){}
+  gStart(e.clientX,e.clientY);
+});
+STAGE.addEventListener('pointermove',e=>{
+  if(e.pointerType==='touch') return;
+  if(g){e.preventDefault(); gMove(e.clientX,e.clientY);}
+});
+STAGE.addEventListener('pointerup',e=>{
+  if(e.pointerType==='touch') return;
+  if(g){e.preventDefault(); gEnd(e.clientX,e.clientY);}
+});
+STAGE.addEventListener('pointercancel',e=>{
+  if(e.pointerType==='touch'||!g) return;
+  gEnd(e.clientX,e.clientY);
+});
+STAGE.addEventListener('contextmenu',e=>e.preventDefault());
+document.addEventListener('touchmove',e=>{if(g)e.preventDefault();},{passive:false});
+function key(k){
+  if((k==='back'||k==='home'||k==='recents'||k==='enter')&&wsReady&&wsInput&&wsSend({a:'key',k})) return;
+  post(`/key/${encodeURIComponent(cur)}?k=${k}`);
+}
+function sendText(){
+  const t=document.getElementById('txt').value;
+  post(`/text/${encodeURIComponent(cur)}?t=${encodeURIComponent(t)}`);
+}
+document.getElementById('bBack').onclick=()=>key('back');
+document.getElementById('bRecents').onclick=()=>key('recents');
+document.getElementById('bHome').onclick=()=>key('home');
+document.getElementById('bEnter').onclick=()=>key('enter');
+document.getElementById('bWake').onclick=()=>key('wake');
+document.getElementById('bRename').onclick=renameCurrent;
+document.getElementById('bType').onclick=sendText;
+document.getElementById('txt').addEventListener('keydown',e=>{if(e.key==='Enter') sendText();});
+
+checkSecure();
+fitStage();
+loadDevices().then(has=>{
+  if(!has){ emptyState(); return; }
+  refreshTabs(); fitStage(); updateStatus();
+  post(`/key/${encodeURIComponent(cur)}?k=wake`).catch(()=>{});
+  setTimeout(connectWS,100);
+});
+</script></body></html>
