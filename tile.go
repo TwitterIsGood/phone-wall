@@ -341,6 +341,10 @@ func handleTileWS(w http.ResponseWriter, r *http.Request, key, dev string) {
 				_, _ = ts.control.Write(keyPacket(1, kc))
 				ts.ctrlMu.Unlock()
 			}
+		case "text":
+			if err := writeText(ts.control, &ts.ctrlMu, m.T); err != nil {
+				log.Printf("TILE %s text: %v", key, err)
+			}
 		}
 	}
 }

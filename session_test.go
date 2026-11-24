@@ -3,7 +3,9 @@ package main
 import (
 	"bytes"
 	"encoding/binary"
+	"strings"
 	"testing"
+	"unicode/utf8"
 )
 
 func TestNALHeader(t *testing.T) {
@@ -85,10 +87,127 @@ func TestKeyPacket(t *testing.T) {
 	if len(p) != 14 {
 		t.Fatalf("size = %d", len(p))
 	}
-	if p[0] != 0 || p[1] != 0 {
+	if p[0] != ctrlInjectKeycode || p[1] != 0 {
 		t.Fatalf("header = %v", p[:2])
 	}
 	if code := binary.BigEndian.Uint32(p[2:]); code != 187 {
 		t.Fatalf("keycode = %d", code)
+	}
+	if code := keycodes["del"]; code != 67 {
+		t.Fatalf("del keycode = %d, want 67", code)
+	}
+	if code := keycodes["enter"]; code != 66 {
+		t.Fatalf("enter keycode = %d, want 66", code)
+	}
+}
+
+func TestInjectTextPacket(t *testing.T) {
+	p := injectTextPacket("hello")
+	if len(p) != 5+5 {
+		t.Fatalf("size = %d", len(p))
+	}
+	if p[0] != ctrlInjectText {
+		t.Fatalf("type = %d", p[0])
+	}
+	if n := binary.BigEndian.Uint32(p[1:]); n != 5 {
+		t.Fatalf("length = %d", n)
+	}
+	if got := string(p[5:]); got != "hello" {
+		t.Fatalf("text = %q", got)
+	}
+}
+
+func TestSetClipboardPacket(t *testing.T) {
+	const text = "你好123"
+	p := setClipboardPacket(text)
+	if len(p) != 14+len(text) {
+		t.Fatalf("size = %d", len(p))
+	}
+	if p[0] != ctrlSetClipboard {
+		t.Fatalf("type = %d", p[0])
+	}
+	for i := 1; i <= 8; i++ {
+		if p[i] != 0 {
+			t.Fatalf("sequence not zero: %x", p[1:9])
+		}
+	}
+	if p[9] != 1 {
+		t.Fatalf("paste flag = %d", p[9])
+	}
+	if n := binary.BigEndian.Uint32(p[10:]); int(n) != len(text) {
+		t.Fatalf("length = %d, want %d", n, len(text))
+	}
+	if got := string(p[14:]); got != text {
+		t.Fatalf("text = %q", got)
+	}
+}
+
+func TestTextPackets(t *testing.T) {
+	if got := textPackets(""); got != nil {
+		t.Fatalf("empty text = %v", got)
+	}
+
+	// ASCII uses inject-text and is chunked at 300 bytes per packet.
+	long := strings.Repeat("x", 700)
+	packets := textPackets(long)
+	if len(packets) != 3 {
+		t.Fatalf("long ascii packets = %d, want 3", len(packets))
+	}
+	var joined []byte
+	for i, p := range packets {
+		if p[0] != ctrlInjectText {
+			t.Fatalf("packet %d type = %d", i, p[0])
+		}
+		if len(p)-5 > maxInjectTextBytes {
+			t.Fatalf("packet %d payload = %d bytes", i, len(p)-5)
+		}
+		joined = append(joined, p[5:]...)
+	}
+	if string(joined) != long {
+		t.Fatalf("chunks do not reassemble: %d bytes", len(joined))
+	}
+
+	// Any non-ASCII rune switches to clipboard + paste, which the device can
+	// deliver as Unicode instead of KeyCharacterMap key events.
+	for _, text := range []string{"你好", "abc中文", "line\nbreak", "café"} {
+		packets := textPackets(text)
+		if len(packets) != 1 || packets[0][0] != ctrlSetClipboard {
+			t.Fatalf("%q did not use the clipboard path", text)
+		}
+		if got := string(packets[0][14:]); got != text {
+			t.Fatalf("%q payload = %q", text, got)
+		}
+	}
+}
+
+func TestChunkUTF8StaysOnRuneBoundaries(t *testing.T) {
+	text := strings.Repeat("中", 5) // 3 bytes per rune
+	chunks := chunkUTF8(text, 7)
+	var joined strings.Builder
+	for _, c := range chunks {
+		if len(c) > 7 {
+			t.Fatalf("chunk %q is %d bytes", c, len(c))
+		}
+		if !utf8.ValidString(c) {
+			t.Fatalf("chunk split a rune: %x", c)
+		}
+		joined.WriteString(c)
+	}
+	if joined.String() != text {
+		t.Fatalf("chunks do not reassemble")
+	}
+}
+
+func TestClipTextKeepsValidUTF8(t *testing.T) {
+	text := strings.Repeat("中", maxTextBytes/3+10)
+	got := clipText(text)
+	if len(got) > maxTextBytes {
+		t.Fatalf("clipped to %d bytes", len(got))
+	}
+	if !utf8.ValidString(got) {
+		t.Fatalf("clip split a rune")
+	}
+	if !strings.HasPrefix(text, got) {
+		t.Fatalf("clip is not a prefix")
 	}
 }

@@ -16,6 +16,7 @@ type wsMsg struct {
 	FW float64 `json:"fw"`
 	FH float64 `json:"fh"`
 	K  string  `json:"k"`
+	T  string  `json:"t"`
 }
 
 func wsHandler(w http.ResponseWriter, r *http.Request) {
@@ -41,6 +42,7 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 	defer ws.Close()
 
 	var writeMu sync.Mutex
+	var ctrlMu sync.Mutex
 	sendText := func(v any) {
 		b, _ := json.Marshal(v)
 		writeMu.Lock()
@@ -104,12 +106,18 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 			} else if m.A == "up" {
 				act = 1
 			}
+			ctrlMu.Lock()
 			_, _ = sess.control.Write(touchPacket(act, x, y, sw, sh))
+			ctrlMu.Unlock()
 		case "key":
 			if kc, ok := keycodes[m.K]; ok {
+				ctrlMu.Lock()
 				_, _ = sess.control.Write(keyPacket(0, kc))
 				_, _ = sess.control.Write(keyPacket(1, kc))
+				ctrlMu.Unlock()
 			}
+		case "text":
+			_ = writeText(sess.control, &ctrlMu, m.T)
 		}
 	}
 }

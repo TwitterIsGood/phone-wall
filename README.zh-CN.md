@@ -22,7 +22,7 @@ Phone Wall 把通过 USB 或无线 ADB 连接的安卓设备变成一个自托�
 - **真正的一屏多机。** `/grid` 平铺所有手机，每个格子独立控制；`/` 是单台手机的专注视图。
 - **同一设备共享一路会话。** 多个标签页 / 多个人看同一台手机只用一个 scrcpy 编码器；缓存最近的 SPS/PPS + IDR，新连接立刻出画面；最后一个观看者离开 30 秒后才回收。
 - **单屏 60fps，平铺更省资源。** 单屏请求原生分辨率 60fps；格子请求 30fps、最长边 1440px。
-- **输入走 scrcpy 控制通道。** 触摸和按键与视频共用同一路连接；控制通道不可用时自动回退到 HTTP 注入。
+- **输入走 scrcpy 控制通道。** 触摸、按键和文字都与视频共用同一路连接；点击格子会把物理键盘锁定到这台设备；控制通道不可用时自动回退到 HTTP 注入。
 - **老设备兜底。** `scrcpy-server` 起不来时（例如 Android 6 的 OPPO A57）自动回退 `screenrecord` + `adb input`，不会留下黑屏。
 - **零配置发现。** 没有配置文件时用 `adb devices -l` 自动发现；同一台手机的 USB 与无线条目会按 `ro.serialno` 合并，并按型号命名。
 - **改名与状态。** 页面内改名（写入 `names.json`），在线/离线状态一目了然。
@@ -86,7 +86,15 @@ go run . --scrcpy-jar /path/to/scrcpy-server
 
 每台设备以 `tunnel_forward=true`、`raw_stream=true`、`control=true` 和独立的 `scid` 启动 `scrcpy-server`，通过同一个 `adb forward` 打开视频和控制两条 TCP 连接。服务端把字节流切成 Annex-B NAL，缓存最近的关键帧组，再通过 WebSocket 发给浏览器。浏览器用 SPS/PPS 构造 `avcC`，把 NAL 封装成 `EncodedVideoChunk` 交给 `VideoDecoder`，解码帧直接画到 `<canvas>`。
 
-触摸和按键使用 scrcpy 的二进制控制协议（32 字节 inject-touch、14 字节 inject-keycode）。控制通道不可用时，前端回退到 `POST /tap`、`/swipe`、`/key`、`/text`，由服务端调用 `adb shell input`。
+触摸和按键使用 scrcpy 的二进制控制协议（32 字节 inject-touch、14 字节 inject-keycode）。文字走 inject-text（可打印 ASCII），其他字符则用 set-clipboard + 粘贴。控制通道不可用时，前端回退到 `POST /tap`、`/swipe`、`/key`、`/text`，由服务端调用 `adb shell input`。
+
+### 输入文字
+
+在平铺页点击某个格子（单屏页点击画面）后，该设备成为键盘目标：蓝色边框标明按键会发往哪台手机，并且只走那台设备的 WebSocket。可打印 ASCII、<kbd>退格</kbd>、<kbd>Delete</kbd>、<kbd>回车</kbd>、<kbd>Tab</kbd> 和方向键都会被捕获；<kbd>Esc</kbd> 释放设备。点击 <kbd>⌨</kbd> 按钮会打开该格子的文字输入框，适合手机浏览器和输入法多字符输入；发送和 ⏎ 按钮会一次发送整段文字。
+
+可打印 ASCII 通过 scrcpy 的 `INJECT_TEXT` 发送，每条最多 300 字节。中文、emoji 等非 ASCII 字符无法被 scrcpy 的 `KeyCharacterMap` 转成按键事件，因此 Phone Wall 用 `SET_CLIPBOARD` 控制消息写入设备剪贴板，再发送 `KEYCODE_PASTE` 粘贴。这会覆盖手机剪贴板——手机上的任何应用都能读到，请不要用这种方式粘贴密码等敏感内容。
+
+设备没有控制通道（回退到 `screenrecord`）时，`POST /text` 使用 `adb shell input text`，**只支持 ASCII**（空格写成 `%s`）。这类设备要输入非 ASCII 文字，需要安装并切换到 [ADB Keyboard](https://github.com/senzhk/ADBKeyBoard) 输入法（`com.android.adbkeyboard`），Phone Wall 会改发它的 `ADB_INPUT_TEXT` 广播；没有切换时接口返回 `501` 并说明原因。
 
 ## 配置
 
@@ -130,17 +138,17 @@ go run . --scrcpy-jar /path/to/scrcpy-server
 | `GET /status` | `{"status":{"<key>":"device"\|"offline"}}`。 |
 | `GET /frame/{key}` | PNG 快照，用于首帧。 |
 | `GET /ws?dev={key}[&tile=1]` | WebSocket 传 H.264；文本消息承载输入。 |
-| `POST /key/{key}?k=back\|home\|recents\|enter\|wake` | 按键。 |
+| `POST /key/{key}?k=back\|home\|recents\|enter\|del\|tab\|dpad_up\|…\|wake` | 按键。 |
 | `POST /tap/{key}?x=&y=&fw=&fh=` | 按画面坐标点击。 |
 | `POST /swipe/{key}?x1=&y1=&x2=&y2=&d=&fw=&fh=` | 滑动。 |
-| `POST /text/{key}?t=` | 输入文字（ASCII，遵循 `adb input text` 规则）。 |
+| `POST /text/{key}?t=` | 没有控制通道时的文字兜底。ASCII 走 `adb input text`；非 ASCII 走 ADB Keyboard 广播（未切换该输入法时返回 `501`）。 |
 | `POST /rename/{key}?name=` | 设置或清除显示名称。 |
 
 ## 限制
 
 - **只有画面，没有声音。**
 - **单指操作。** 点击、拖动、滑动可用；双指缩放/多指手势不支持。
-- **文字输入仅 ASCII。** 走 `adb shell input text`；中文等需要设备端输入法。
+- **非 ASCII 文字走剪贴板。** 有控制通道时通过 `SET_CLIPBOARD` + `KEYCODE_PASTE` 粘贴，会覆盖手机剪贴板。没有控制通道时，中文等需要 ADB Keyboard 输入法；`adb shell input text` 本身只支持 ASCII。
 - **回退模式更慢。** 不能运行新版 scrcpy-server 的设备使用 `screenrecord`，约 30fps、延迟约 1 秒。
 - **无线调试不持久。** 多数手机重启后要重新打开；之后 Phone Wall 会把它标为离线。
 - **这是投屏/控制器，不是设备农场平台。** 不提供装应用、传文件、设备分配、用户管理；需要这些请用 [DeviceFarmer/STF](https://github.com/DeviceFarmer/stf)。

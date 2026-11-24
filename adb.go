@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"os/exec"
 	"regexp"
@@ -40,7 +41,15 @@ func adbFor(dev string, args ...string) []string {
 
 // runAdb is best-effort: input events have no useful return value.
 func runAdb(dev string, args ...string) {
-	_ = exec.Command(adbPath, adbFor(dev, append([]string{"shell"}, args...)...)...).Run()
+	_ = runAdbErr(dev, args...)
+}
+
+// runAdbErr runs a device shell command and returns its failure, for callers
+// that need to report an error to the browser.
+func runAdbErr(dev string, args ...string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	return exec.CommandContext(ctx, adbPath, adbFor(dev, append([]string{"shell"}, args...)...)...).Run()
 }
 
 func findDevice(key string) (Device, bool) {
@@ -277,11 +286,20 @@ func swipeHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 var adbKeycodes = map[string]string{
-	"back":    "KEYCODE_BACK",
-	"home":    "KEYCODE_HOME",
-	"recents": "KEYCODE_APP_SWITCH",
-	"enter":   "KEYCODE_ENTER",
-	"wake":    "KEYCODE_WAKEUP",
+	"back":        "KEYCODE_BACK",
+	"home":        "KEYCODE_HOME",
+	"recents":     "KEYCODE_APP_SWITCH",
+	"enter":       "KEYCODE_ENTER",
+	"wake":        "KEYCODE_WAKEUP",
+	"del":         "KEYCODE_DEL",
+	"forward_del": "KEYCODE_FORWARD_DEL",
+	"tab":         "KEYCODE_TAB",
+	"dpad_up":     "KEYCODE_DPAD_UP",
+	"dpad_down":   "KEYCODE_DPAD_DOWN",
+	"dpad_left":   "KEYCODE_DPAD_LEFT",
+	"dpad_right":  "KEYCODE_DPAD_RIGHT",
+	"move_home":   "KEYCODE_MOVE_HOME",
+	"move_end":    "KEYCODE_MOVE_END",
 }
 
 func keyHandler(w http.ResponseWriter, r *http.Request) {
@@ -307,14 +325,61 @@ func shellQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
+var errADBKeyboardMissing = errors.New("non-ASCII text needs a scrcpy control channel, or the ADB Keyboard IME (com.android.adbkeyboard) installed and selected; adb shell input text is ASCII-only")
+
+// adbInjectText is the fallback for devices whose session has no scrcpy
+// control channel (the screenrecord path). `adb shell input text` is ASCII
+// only: spaces have to be written as %s, and anything above U+007E is either
+// dropped or rejected by the device. For non-ASCII text we use the ADB
+// Keyboard IME's broadcast instead (com.android.adbkeyboard, ADB_INPUT_TEXT),
+// which only works when that IME is installed and currently selected.
+func adbInjectText(dev, text string) (string, error) {
+	if isASCIIText(text) {
+		arg := strings.ReplaceAll(text, " ", "%s")
+		if err := runAdbErr(dev, "input", "text", shellQuote(arg)); err != nil {
+			return "", err
+		}
+		return "input-text", nil
+	}
+	if !adbKeyboardActive(dev) {
+		return "", errADBKeyboardMissing
+	}
+	if err := runAdbErr(dev, "am", "broadcast", "-a", "ADB_INPUT_TEXT", "--es", "msg", shellQuote(text)); err != nil {
+		return "", err
+	}
+	return "adb-keyboard", nil
+}
+
+// adbKeyboardActive checks the selected IME, not just package presence: the
+// broadcast is ignored unless ADB Keyboard is the active input method.
+func adbKeyboardActive(dev string) bool {
+	out, err := adbOut(5*time.Second, adbFor(dev, "shell", "settings", "get", "secure", "default_input_method")...)
+	if err != nil {
+		return false
+	}
+	return strings.Contains(out, "com.android.adbkeyboard")
+}
+
 func textHandler(w http.ResponseWriter, r *http.Request) {
 	_, dev, ok := requireDevice(w, r)
 	if !ok {
 		return
 	}
-	t := strings.ReplaceAll(r.URL.Query().Get("t"), " ", "%s")
-	runAdb(dev, "input", "text", shellQuote(t))
-	jsonReply(w, map[string]any{"ok": true})
+	text := clipText(r.URL.Query().Get("t"))
+	if text == "" {
+		jsonError(w, http.StatusBadRequest, "empty text")
+		return
+	}
+	mode, err := adbInjectText(dev, text)
+	if err != nil {
+		status := http.StatusBadGateway
+		if errors.Is(err, errADBKeyboardMissing) {
+			status = http.StatusNotImplemented
+		}
+		jsonError(w, status, err.Error())
+		return
+	}
+	jsonReply(w, map[string]any{"ok": true, "mode": mode})
 }
 
 func frameHandler(w http.ResponseWriter, r *http.Request) {
