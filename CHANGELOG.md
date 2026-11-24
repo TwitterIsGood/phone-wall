@@ -6,6 +6,23 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Keyboard input actually reaches the phone now: clicking a grid tile (or the
+  single-view video) routes physical keystrokes to that device only, and a new
+  per-tile ⌨ text row sends whole strings. Backspace, Delete, Enter, Tab, the
+  arrow keys and Escape release are mapped to Android key codes.
+- Text over the scrcpy control channel: printable ASCII uses `INJECT_TEXT`;
+  non-ASCII text uses `SET_CLIPBOARD` + `KEYCODE_PASTE` so Chinese and emoji
+  work. The HTTP fallback keeps `adb shell input text` for ASCII and uses the
+  ADB Keyboard IME broadcast for Unicode when that IME is selected.
+
+### Fixed
+
+- Typing on the physical keyboard while a tile was focused did nothing. The
+  grid had no keyboard listener and the only text path was an ASCII-only
+  `adb shell input text` call from single view.
+
 ## [0.1.1] - 2026-11-24
 
 ### Added

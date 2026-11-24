@@ -13,12 +13,23 @@
  #grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:10px;padding:10px;align-items:start}
  .empty{grid-column:1/-1;color:#888;text-align:center;padding:40px 16px;line-height:1.6}
  .tile{position:relative;background:#1b1b1b;border:1px solid #2c2c2c;border-radius:10px;padding:6px;display:flex;flex-direction:column;align-items:center;min-width:0}
+ .tile.active{outline:2px solid #4c8dff;outline-offset:2px}
  .tnav{position:absolute;left:50%;bottom:10px;transform:translateX(-50%);z-index:5;display:flex;gap:4px;padding:4px 6px;background:rgba(15,15,15,.62);border:1px solid rgba(255,255,255,.12);border-radius:999px;backdrop-filter:blur(6px)}
+ .tile.kbd .tnav{bottom:56px}
  .tnav button{width:38px;height:30px;border-radius:999px;background:transparent;color:#eee;border:0;cursor:pointer;font:15px system-ui;line-height:1;opacity:.9}
  .tnav button:hover{background:rgba(255,255,255,.14);opacity:1}
  .thead{display:flex;align-items:center;gap:6px;width:100%;padding:2px 4px 6px;min-width:0}
- .tname{color:#ddd;text-decoration:none;font-weight:600;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+ .tname{color:#ddd;text-decoration:none;font-weight:600;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;min-width:0}
  .tname:hover{color:#fff}
+ .tkbd{flex:none;background:transparent;border:0;color:#bbb;cursor:pointer;font:16px system-ui;line-height:1;padding:2px 4px;border-radius:6px}
+ .tkbd:hover{background:rgba(255,255,255,.12);color:#fff}
+ .tile.active .tkbd{color:#8ab4ff}
+ .ttype{display:none;gap:6px;width:100%;padding:6px 4px 2px;align-items:center;min-width:0}
+ .tile.kbd .ttype{display:flex}
+ .ttype input{flex:1 1 auto;min-width:0;background:#111;border:1px solid #444;color:#eee;border-radius:8px;padding:7px 8px;font:inherit}
+ .ttype button{flex:none;background:#2b2b2b;color:#eee;border:1px solid #444;border-radius:8px;padding:7px 9px;font:inherit;cursor:pointer}
+ .ttype button:hover{background:#383838}
+ .tcanvas:focus{outline:none}
  .dot{width:9px;height:9px;border-radius:50%;background:#777;display:inline-block;flex:none}
  .dot.on{background:#22c55e;box-shadow:0 0 6px #22c55e}
  .dot.off{background:#ef4444;box-shadow:0 0 6px #ef4444}
@@ -49,6 +60,8 @@ function toast(t){const e=document.getElementById('toast');e.textContent=t;e.sty
 function post(path){return fetch(path,{method:'POST'});}
 async function loadDevices(){
   const r=await fetch('/devices'); const d=await r.json();
+  if(activeTile) activeTile.deactivate();
+  activeTile=null;
   GRID.innerHTML=''; tiles=[];
   (d.devices||[]).forEach(o=>{
     if(typeof o==='string') o={key:o,name:o};
@@ -76,17 +89,40 @@ class Tile{
     this.dot=document.createElement('span'); this.dot.className='dot'; this.dot.id='dot_'+key;
     const a=document.createElement('a'); a.className='tname'; a.textContent=name;
     a.href='/?dev='+encodeURIComponent(key); a.target='_blank'; a.title=I18N.t('openSingle');
-    head.appendChild(this.dot); head.appendChild(a);
+    this.kbdBtn=document.createElement('button'); this.kbdBtn.type='button'; this.kbdBtn.className='tkbd';
+    this.kbdBtn.textContent='⌨'; this.kbdBtn.title=I18N.t('keyboard'); this.kbdBtn.setAttribute('aria-label',I18N.t('keyboard'));
+    this.kbdBtn.onclick=(e)=>{e.stopPropagation();this.toggleKeyboard();};
+    head.appendChild(this.dot); head.appendChild(a); head.appendChild(this.kbdBtn);
     this.nav=document.createElement('div'); this.nav.className='tnav';
     [['back','◀'],['home','●'],['recents','■']].forEach(([k,ic])=>{
       const b=document.createElement('button'); b.type='button'; b.textContent=ic; b.title=I18N.t(k);
       b.onclick=(e)=>{e.stopPropagation();this.navKey(k);};
       this.nav.appendChild(b);
     });
-    this.canvas=document.createElement('canvas'); this.canvas.className='tcanvas';
+    this.canvas=document.createElement('canvas'); this.canvas.className='tcanvas'; this.canvas.tabIndex=-1;
     this.canvas.width=270; this.canvas.height=600;
     this.ctx=this.canvas.getContext('2d',{alpha:false,desynchronized:true});
-    this.el.appendChild(head); this.el.appendChild(this.canvas); this.el.appendChild(this.nav);
+    this.typeRow=document.createElement('div'); this.typeRow.className='ttype';
+    this.input=document.createElement('input'); this.input.type='text';
+    this.input.placeholder=I18N.t('typePlaceholder'); this.input.title=I18N.t('textHint');
+    this.input.setAttribute('autocomplete','off'); this.input.setAttribute('autocapitalize','off'); this.input.spellcheck=false;
+    this.sendBtn=document.createElement('button'); this.sendBtn.type='button'; this.sendBtn.textContent=I18N.t('send');
+    this.sendBtn.title=I18N.t('send');
+    this.sendBtn.onclick=()=>this.sendTypedText(false);
+    this.delBtn=document.createElement('button'); this.delBtn.type='button'; this.delBtn.textContent='⌫';
+    this.delBtn.title=I18N.t('backspace'); this.delBtn.setAttribute('aria-label',I18N.t('backspace'));
+    this.delBtn.onclick=()=>this.sendKey('del');
+    this.enterBtn=document.createElement('button'); this.enterBtn.type='button'; this.enterBtn.textContent='⏎';
+    this.enterBtn.title=I18N.t('enter'); this.enterBtn.setAttribute('aria-label',I18N.t('enter'));
+    this.enterBtn.onclick=()=>this.sendTypedText(true);
+    this.input.addEventListener('keydown',e=>{
+      if(e.key==='Enter'){e.preventDefault();this.sendTypedText(true);}
+      else if(e.key==='Escape'){e.preventDefault();this.deactivate();}
+    });
+    this.typeRow.appendChild(this.input); this.typeRow.appendChild(this.sendBtn);
+    this.typeRow.appendChild(this.delBtn); this.typeRow.appendChild(this.enterBtn);
+    this.el.appendChild(head); this.el.appendChild(this.canvas);
+    this.el.appendChild(this.typeRow); this.el.appendChild(this.nav);
     GRID.appendChild(this.el);
     this.gen=0; this.ws=null; this.wsReady=false; this.wsInput=false;
     this.decoder=null; this.cfgKey=''; this.sps=null; this.pps=null; this.pend=[]; this.ts=0;
@@ -94,6 +130,56 @@ class Tile{
     this.g=null; this.lastMove=0;
     this.bindInput();
     this.connect();
+  }
+  activate(){
+    if(activeTile&&activeTile!==this) activeTile.deactivate();
+    activeTile=this;
+    this.el.classList.add('active');
+    try{this.canvas.focus({preventScroll:true});}catch(e){}
+  }
+  deactivate(){
+    this.el.classList.remove('active');
+    if(activeTile===this) activeTile=null;
+    try{
+      if(document.activeElement===this.canvas||document.activeElement===this.input) document.activeElement.blur();
+    }catch(e){}
+  }
+  toggleKeyboard(){
+    if(this.el.classList.contains('kbd')){ this.el.classList.remove('kbd'); this.deactivate(); return; }
+    this.el.classList.add('kbd');
+    this.activate();
+    try{this.input.focus({preventScroll:true});}catch(e){}
+  }
+  sendKey(k){
+    if(this.wsReady&&this.wsInput&&this.ws&&this.ws.readyState===1){
+      try{this.ws.send(JSON.stringify({a:'key',k})); return;}catch(e){}
+    }
+    post(`/key/${encodeURIComponent(this.key)}?k=${encodeURIComponent(k)}`).catch(()=>{});
+  }
+  sendText(t,notify){
+    if(!t) return;
+    const viaClipboard=!isAsciiText(t);
+    if(this.wsReady&&this.wsInput&&this.ws&&this.ws.readyState===1){
+      try{
+        this.ws.send(JSON.stringify({a:'text',t}));
+        if(notify&&viaClipboard) toast(I18N.t('textViaClipboard'));
+        return;
+      }catch(e){}
+    }
+    fetch(`/text/${encodeURIComponent(this.key)}?t=${encodeURIComponent(t)}`,{method:'POST'})
+      .then(async r=>{
+        if(!r.ok){
+          const d=await r.json().catch(()=>({}));
+          toast(d.error||I18N.t('sendFailed'));
+        }else if(notify&&viaClipboard) toast(I18N.t('textViaClipboard'));
+      })
+      .catch(()=>toast(I18N.t('sendFailed')));
+  }
+  sendTypedText(submit){
+    const t=this.input.value;
+    if(t){ this.sendText(t,true); this.input.value=''; }
+    if(submit) this.sendKey('enter');
+    try{this.input.focus({preventScroll:true});}catch(e){}
   }
   bootstrap(my){
     fetch(`/frame/${encodeURIComponent(this.key)}?t=${Date.now()}`,{cache:'no-store'})
@@ -266,10 +352,7 @@ class Tile{
             ny:Math.max(0,Math.min(1,(cy-r.top)/r.height))};
   }
   navKey(k){
-    if(this.wsReady&&this.wsInput&&this.ws&&this.ws.readyState===1){
-      try{this.ws.send(JSON.stringify({a:'key',k})); return;}catch(e){}
-    }
-    post(`/key/${encodeURIComponent(this.key)}?k=${k}`).catch(()=>{});
+    this.sendKey(k);
   }
   send(a,nx,ny){
     if(this.wsReady&&this.wsInput&&this.ws&&this.ws.readyState===1){
@@ -291,7 +374,8 @@ class Tile{
   }
   bindInput(){
     const el=this.canvas;
-    const start=(cx,cy)=>{this.g={sx:cx,sy:cy,n:this.norm(cx,cy),moved:false,t:Date.now(),live:false};
+    const start=(cx,cy)=>{this.activate();
+      this.g={sx:cx,sy:cy,n:this.norm(cx,cy),moved:false,t:Date.now(),live:false};
       this.g.live=this.send('down',this.g.n.nx,this.g.n.ny);
     };
     const move=(cx,cy)=>{
@@ -320,5 +404,34 @@ class Tile{
     document.addEventListener('touchmove',e=>{if(this.g)e.preventDefault();},{passive:false});
   }
 }
+// One capture target at a time: clicking a tile makes it active, and physical
+// keystrokes go only to that tile's WebSocket. Text fields, buttons, links and
+// selects keep their normal keyboard behaviour so the language menu and the
+// per-tile text row are still usable.
+let activeTile=null;
+const KEYMAP={Backspace:'del',Delete:'forward_del',Enter:'enter',Tab:'tab',
+  ArrowUp:'dpad_up',ArrowDown:'dpad_down',ArrowLeft:'dpad_left',ArrowRight:'dpad_right',
+  Home:'move_home',End:'move_end'};
+function isAsciiText(t){
+  for(let i=0;i<t.length;i++){const c=t.charCodeAt(i);if(c<32||c>126)return false;}
+  return true;
+}
+function isFormControl(el){
+  if(!el) return false;
+  const tag=el.tagName;
+  return tag==='INPUT'||tag==='TEXTAREA'||tag==='SELECT'||tag==='BUTTON'||tag==='A'||!!el.isContentEditable;
+}
+document.addEventListener('pointerdown',e=>{
+  if(activeTile&&!activeTile.el.contains(e.target)) activeTile.deactivate();
+});
+document.addEventListener('keydown',e=>{
+  if(!activeTile||e.isComposing||e.defaultPrevented) return;
+  if(e.ctrlKey||e.metaKey||e.altKey) return;
+  if(isFormControl(e.target)) return;
+  if(e.key==='Escape'){e.preventDefault();activeTile.deactivate();return;}
+  const k=KEYMAP[e.key];
+  if(k){e.preventDefault();activeTile.sendKey(k);return;}
+  if(e.key.length===1){e.preventDefault();activeTile.sendText(e.key,false);}
+});
 loadDevices();
 </script></body></html>

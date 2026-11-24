@@ -16,6 +16,8 @@
  #wrap{flex:1 1 auto;min-height:0;display:flex;align-items:center;justify-content:center;padding:6px}
  #stage{position:relative;display:inline-block;border-radius:12px;overflow:hidden;box-shadow:0 0 0 2px #333;background:#000;touch-action:none;max-width:100%;max-height:100%}
  #screen{display:block;touch-action:none;user-select:none;-webkit-user-drag:none;background:#000}
+ #screen:focus{outline:none}
+ #toast{position:fixed;left:50%;bottom:92px;transform:translateX(-50%);background:rgba(0,0,0,.85);color:#ddd;padding:6px 12px;border-radius:999px;font-size:12px;display:none;z-index:30}
  #loading{position:absolute;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:rgba(0,0,0,.82);color:#ddd;font-size:15px;text-align:center;padding:20px;pointer-events:none}
  #loading.show{display:flex}
  #loading.off .spinner{display:none}
@@ -40,6 +42,7 @@
  <select id="lang"></select>
 </header>
 <div id="warn"></div>
+<div id="toast"></div>
 <div id="wrap">
  <div id="stage">
   <canvas id="screen" width="480" height="1067"></canvas>
@@ -75,6 +78,7 @@ const CTX=CANVAS.getContext('2d',{alpha:false,desynchronized:true});
 const LOADING=document.getElementById('loading');
 const LOADTXT=document.getElementById('loadtxt');
 const WATERMARK=document.getElementById('watermark');
+CANVAS.tabIndex=-1;
 let cur=new URLSearchParams(location.search).get('dev')||localStorage.getItem('pm_dev')||'';
 let status={}, offlineShown=false, loadingTimer=0, devNames={};
 let gen=0, ws=null, wsReady=false, wsInput=false;
@@ -83,6 +87,11 @@ let buf=new Uint8Array(0), lastChunk=0, idleTimer=0, lastMoveMs=0;
 
 function showLoading(t,off){LOADTXT.textContent=t;LOADING.classList.toggle('off',!!off);LOADING.classList.add('show');}
 function hideLoading(){LOADING.classList.remove('show');}
+function showToast(t){const e=document.getElementById('toast');e.textContent=t;e.style.display='block';clearTimeout(showToast._t);showToast._t=setTimeout(()=>e.style.display='none',2000);}
+function isAsciiText(t){
+  for(let i=0;i<t.length;i++){const c=t.charCodeAt(i);if(c<32||c>126)return false;}
+  return true;
+}
 function displayNameOf(k){return devNames[k]||k;}
 function setWatermark(){WATERMARK.textContent=displayNameOf(cur);}
 function post(path){return fetch(path,{method:'POST'});}
@@ -366,6 +375,7 @@ function wsSend(o){
 let g=null;
 function gStart(cx,cy){
   const p=ptFromClient(cx,cy);
+  try{CANVAS.focus({preventScroll:true});}catch(e){}
   g={sx:cx,sy:cy,t:Date.now(),moved:false,
      live:wsReady&&wsInput&&wsSend({a:'down',x:p.x,y:p.y,fw:p.fw,fh:p.fh})};
 }
@@ -425,13 +435,38 @@ STAGE.addEventListener('pointercancel',e=>{
 });
 STAGE.addEventListener('contextmenu',e=>e.preventDefault());
 document.addEventListener('touchmove',e=>{if(g)e.preventDefault();},{passive:false});
+const SEND_KEYS=new Set(['back','home','recents','enter','del','forward_del','tab',
+  'dpad_up','dpad_down','dpad_left','dpad_right','move_home','move_end']);
 function key(k){
-  if((k==='back'||k==='home'||k==='recents'||k==='enter')&&wsReady&&wsInput&&wsSend({a:'key',k})) return;
-  post(`/key/${encodeURIComponent(cur)}?k=${k}`);
+  if(SEND_KEYS.has(k)&&wsReady&&wsInput&&wsSend({a:'key',k})) return;
+  post(`/key/${encodeURIComponent(cur)}?k=${encodeURIComponent(k)}`).catch(()=>{});
 }
-function sendText(){
-  const t=document.getElementById('txt').value;
-  post(`/text/${encodeURIComponent(cur)}?t=${encodeURIComponent(t)}`);
+function sendChar(ch){
+  if(wsReady&&wsInput&&wsSend({a:'text',t:ch})) return;
+  fetch(`/text/${encodeURIComponent(cur)}?t=${encodeURIComponent(ch)}`,{method:'POST'})
+    .then(async r=>{
+      if(!r.ok){const d=await r.json().catch(()=>({}));showToast(d.error||I18N.t('sendFailed'));}
+    })
+    .catch(()=>showToast(I18N.t('sendFailed')));
+}
+function sendText(submit){
+  const el=document.getElementById('txt');
+  const t=el.value;
+  if(!t){ if(submit) key('enter'); return; }
+  const viaClipboard=!isAsciiText(t);
+  if(wsReady&&wsInput&&wsSend({a:'text',t})){
+    el.value=''; if(submit) key('enter');
+    if(viaClipboard) showToast(I18N.t('textViaClipboard'));
+    el.focus(); return;
+  }
+  fetch(`/text/${encodeURIComponent(cur)}?t=${encodeURIComponent(t)}`,{method:'POST'})
+    .then(async r=>{
+      if(!r.ok){const d=await r.json().catch(()=>({}));showToast(d.error||I18N.t('sendFailed'));return;}
+      el.value=''; if(submit) key('enter');
+      if(viaClipboard) showToast(I18N.t('textViaClipboard'));
+      el.focus();
+    })
+    .catch(()=>showToast(I18N.t('sendFailed')));
 }
 document.getElementById('bBack').onclick=()=>key('back');
 document.getElementById('bRecents').onclick=()=>key('recents');
@@ -439,8 +474,25 @@ document.getElementById('bHome').onclick=()=>key('home');
 document.getElementById('bEnter').onclick=()=>key('enter');
 document.getElementById('bWake').onclick=()=>key('wake');
 document.getElementById('bRename').onclick=renameCurrent;
-document.getElementById('bType').onclick=sendText;
-document.getElementById('txt').addEventListener('keydown',e=>{if(e.key==='Enter') sendText();});
+document.getElementById('bType').onclick=()=>sendText(false);
+document.getElementById('txt').addEventListener('keydown',e=>{
+  if(e.key==='Enter'){e.preventDefault();sendText(true);}
+  else if(e.key==='Escape'){e.preventDefault();CANVAS.focus();}
+});
+
+// Clicking the video focuses it, then physical keystrokes go to the device.
+// The text row below stays the place for IME/multi-character input.
+const KEYMAP={Backspace:'del',Delete:'forward_del',Enter:'enter',Tab:'tab',
+  ArrowUp:'dpad_up',ArrowDown:'dpad_down',ArrowLeft:'dpad_left',ArrowRight:'dpad_right',
+  Home:'move_home',End:'move_end'};
+document.addEventListener('keydown',e=>{
+  if(document.activeElement!==CANVAS||e.isComposing||e.defaultPrevented) return;
+  if(e.ctrlKey||e.metaKey||e.altKey) return;
+  if(e.key==='Escape'){e.preventDefault();CANVAS.blur();return;}
+  const k=KEYMAP[e.key];
+  if(k){e.preventDefault();key(k);return;}
+  if(e.key.length===1){e.preventDefault();sendChar(e.key);}
+});
 
 checkSecure();
 fitStage();

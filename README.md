@@ -22,7 +22,7 @@ Phone Wall turns USB or Wi-Fi connected Android devices into one self-hosted bro
 - **A real grid, not one device at a time.** `/grid` shows every phone side by side; each tile is independently controllable. `/` is a focused single-device view.
 - **One shared session per device.** Every viewer of the same phone shares one scrcpy encoder. The latest SPS/PPS + IDR is cached and replayed to new connections, so a fresh tab paints immediately. The session is torn down 30 seconds after the last viewer leaves.
 - **60 fps single view, efficient tiles.** The focused view requests 60 fps at native resolution; tiles ask for 30 fps and at most 1440 px to keep a large wall cheap.
-- **Input over the scrcpy control channel.** Touch and key events are injected through the same socket as the video, with HTTP fallbacks for devices without a control channel.
+- **Input over the scrcpy control channel.** Touch, keys and text are injected through the same socket as the video, with HTTP fallbacks for devices without a control channel. Clicking a tile captures the physical keyboard for that device only.
 - **Old-device fallback.** If `scrcpy-server` cannot start (for example on an Android 6 OPPO A57), Phone Wall falls back to `screenrecord` plus `adb input` instead of showing a black tile.
 - **Zero-config discovery.** Without a config file, devices are discovered with `adb devices -l`; USB and wireless entries of the same phone are merged by `ro.serialno`, and tiles are named after the model.
 - **Rename and status.** Rename a tile from the UI (`names.json`), and see online/offline state at a glance.
@@ -86,7 +86,15 @@ Open `http://<host>:8765/?token=a-long-random-token` once. Phone Wall sets an Ht
 
 For each device, Phone Wall starts `scrcpy-server` with `tunnel_forward=true`, `raw_stream=true`, `control=true` and a per-session `scid`. It opens two TCP connections through the same `adb forward`: one for video, one for control. Video bytes are split into Annex-B NAL units, the latest keyframe group is cached, and each viewing browser receives the NALs over a WebSocket. The browser builds the `avcC` description from SPS/PPS and feeds `EncodedVideoChunk`s to `VideoDecoder`; decoded frames are drawn to a `<canvas>`.
 
-Touch and key events use scrcpy's binary control protocol (32-byte inject-touch, 14-byte inject-keycode). When the control channel is unavailable, the client falls back to `POST /tap`, `/swipe`, `/key` and `/text`, which call `adb shell input`.
+Touch and key events use scrcpy's binary control protocol (32-byte inject-touch, 14-byte inject-keycode). Text uses inject-text for printable ASCII and set-clipboard + paste for everything else. When the control channel is unavailable, the client falls back to `POST /tap`, `/swipe`, `/key` and `/text`, which call `adb shell input`.
+
+### Typing text
+
+Click a tile in the grid (or the video in single view) to make it the keyboard target; a blue outline shows which device will receive keys, and only that device's WebSocket is used. Printable ASCII, <kbd>Backspace</kbd>, <kbd>Delete</kbd>, <kbd>Enter</kbd>, <kbd>Tab</kbd> and the arrow keys are captured; <kbd>Esc</kbd> releases the device. The <kbd>⌨</kbd> button opens a per-tile text field for multi-character input (handy on mobile browsers and with an IME); its Send and ⏎ buttons send the whole string.
+
+Printable ASCII goes through scrcpy's `INJECT_TEXT`, split at 300 bytes per message. Non-ASCII text (Chinese, emoji, …) cannot be turned into key events by scrcpy's `KeyCharacterMap`, so Phone Wall writes it to the device clipboard with scrcpy's `SET_CLIPBOARD` message and presses `KEYCODE_PASTE`. This overwrites the Android clipboard — any app on the phone can read it, so avoid pasting secrets that way.
+
+When a device has no control channel (the `screenrecord` fallback), `POST /text` uses `adb shell input text`, which is **ASCII-only** (spaces become `%s`). For non-ASCII text on such a device, install and select the [ADB Keyboard](https://github.com/senzhk/ADBKeyBoard) IME (`com.android.adbkeyboard`); Phone Wall then sends its `ADB_INPUT_TEXT` broadcast. If it is not selected, the endpoint returns `501` with an explanation.
 
 ## Configuration
 
@@ -130,17 +138,17 @@ All mutating endpoints are `POST`. `/status` and `/frame/{key}` are read-only.
 | `GET /status` | `{"status":{"<key>":"device"\|"offline"}}`. |
 | `GET /frame/{key}` | PNG snapshot, used to paint the first frame. |
 | `GET /ws?dev={key}[&tile=1]` | H.264 over WebSocket; JSON text for input. |
-| `POST /key/{key}?k=back\|home\|recents\|enter\|wake` | Key event. |
+| `POST /key/{key}?k=back\|home\|recents\|enter\|del\|tab\|dpad_up\|…\|wake` | Key event. |
 | `POST /tap/{key}?x=&y=&fw=&fh=` | Tap in frame coordinates. |
 | `POST /swipe/{key}?x1=&y1=&x2=&y2=&d=&fw=&fh=` | Swipe. |
-| `POST /text/{key}?t=` | Type text (ASCII, `adb input text` rules). |
+| `POST /text/{key}?t=` | Fallback text injection when there is no control channel. ASCII via `adb input text`; non-ASCII via the ADB Keyboard IME broadcast (`501` if it is not selected). |
 | `POST /rename/{key}?name=` | Set or clear a display name. |
 
 ## Limitations
 
 - **Video only.** Audio is not captured or forwarded.
 - **Single pointer.** Tap, drag and swipe work; pinch-to-zoom / two-finger gestures do not.
-- **Text input is ASCII.** It goes through `adb shell input text`; for Unicode, use an IME on the device.
+- **Non-ASCII text uses the clipboard.** With a control channel it is pasted via `SET_CLIPBOARD` + `KEYCODE_PASTE`, which replaces the phone's clipboard. Without a control channel, Unicode needs the ADB Keyboard IME; `adb shell input text` alone is ASCII-only.
 - **Fallback is slower.** Devices that cannot run a modern scrcpy server use `screenrecord`: about 30 fps and roughly a second of latency.
 - **Wireless debugging is not persistent.** Most phones must re-enable it after a reboot; Phone Wall then marks the device offline.
 - **This is a viewer/controller, not a device farm platform.** No app install, file transfer, device allocation or user management. If you need those, look at [DeviceFarmer/STF](https://github.com/DeviceFarmer/stf).

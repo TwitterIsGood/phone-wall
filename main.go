@@ -159,6 +159,13 @@ func jsonReply(w http.ResponseWriter, v any) {
 	_ = json.NewEncoder(w).Encode(v)
 }
 
+func jsonError(w http.ResponseWriter, status int, msg string) {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": msg})
+}
+
 // withAuth protects every route when a token is configured. The token can be
 // sent as a bearer token, an X-Auth-Token header, a cookie set by an earlier
 // ?token= visit, or a ?token= query parameter.

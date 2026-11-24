@@ -2,6 +2,23 @@ package main
 
 import "testing"
 
+func TestIsASCIIText(t *testing.T) {
+	cases := map[string]bool{
+		"":            true,
+		"abc 123!?":   true,
+		"café":        false,
+		"你好":          false,
+		"a\tb":        false,
+		"line\nbreak": false,
+		"\x7f":        false,
+	}
+	for in, want := range cases {
+		if got := isASCIIText(in); got != want {
+			t.Fatalf("isASCIIText(%q) = %v, want %v", in, got, want)
+		}
+	}
+}
+
 func TestScaleToNatural(t *testing.T) {
 	// Portrait frame on a portrait panel: identity.
 	x, y, sw, sh := scaleToNatural(100, 200, 1080, 2400, 1080, 2400)
